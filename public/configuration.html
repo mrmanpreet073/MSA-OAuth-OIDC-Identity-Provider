@@ -1,0 +1,329 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>OpenID Connect Discovery Configuration</title>
+    <style>
+        :root {
+            --bg-color: #0a0f1d;
+            --card-bg: #111a30;
+            --accent-blue: #0077fe;
+            --neon-glow: #0072ff;
+            --text-main: #e2e8f0;
+            --text-muted: #64748b;
+            --string-color: #4dfdcb;
+            --key-color: #38bdf8;
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+            font-family: 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+        }
+
+        body {
+            background-color: var(--bg-color);
+            color: var(--text-main);
+            min-height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            padding: 2rem;
+            overflow-x: hidden;
+            background: radial-gradient(circle at 50% 50%, #142346 0%, var(--bg-color) 70%);
+        }
+
+        /* Entrance Animation */
+        .container {
+            width: 100%;
+            max-width: 850px;
+            background: var(--card-bg);
+            border: 1px solid rgba(56, 189, 248, 0.15);
+            border-radius: 16px;
+            padding: 2.5rem;
+            box-shadow: 0 20px 40px rgba(0, 0, 0, 0.5), 0 0 50px rgba(0, 114, 255, 0.1);
+            opacity: 0;
+            transform: translateY(30px);
+            animation: fadeInSlideUp 0.8s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+        }
+
+        @keyframes fadeInSlideUp {
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 2rem;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+            padding-bottom: 1.5rem;
+        }
+
+        .title-area h1 {
+            font-size: 1.5rem;
+            font-weight: 600;
+            letter-spacing: -0.5px;
+            background: linear-gradient(200deg, #fff 0%, var(--accent-blue) 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+
+        .title-area p {
+            font-size: 0.875rem;
+            color: var(--text-muted);
+            margin-top: 0.25rem;
+            font-family: monospace;
+        }
+
+        .badge {
+            background: rgba(0, 152, 254, 0.1);
+            /* border: 1px solid grey; */
+            color: var(--accent-blue);
+            padding: 0.4rem 0.8rem;
+            border-radius: 20px;
+            font-size: 0.75rem;
+            font-weight: bold;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            box-shadow: 0 0 12px rgba(0, 114, 254, 0.2);
+            animation: pulseGlow 2s infinite alternate;
+        }
+
+        @keyframes pulseGlow {
+            to {
+                box-shadow: 0 0 20px rgba(0, 242, 254, 0.45);
+                border-color: #fff;
+            }
+        }
+
+        /* Interactive Grid Layout */
+        .endpoints-grid {
+            display: grid;
+            grid-template-columns: 1fr;
+            gap: 1rem;
+            margin-bottom: 2rem;
+        }
+
+        .endpoint-row {
+            display: flex;
+            align-items: center;
+            background: rgba(10, 15, 29, 0.6);
+            padding: 1rem;
+            border-radius: 8px;
+            border-left: 4px solid var(--neon-glow);
+            transition: all 0.3s ease;
+        }
+
+        .endpoint-row:hover {
+            transform: translateX(5px);
+            background: rgba(0, 114, 255, 0.08);
+            border-left-color: var(--accent-blue);
+        }
+
+        .key-label {
+            font-family: monospace;
+            width: 240px;
+            font-size: 0.9rem;
+            color: var(--key-color);
+            flex-shrink: 0;
+        }
+
+        .value-uri {
+            font-family: monospace;
+            font-size: 0.9rem;
+            color: var(--string-color);
+            text-decoration: none;
+            word-break: break-all;
+        }
+
+        .value-uri:hover {
+            text-decoration: underline;
+        }
+
+        .array-tags {
+            display: flex;
+            gap: 0.5rem;
+            flex-wrap: wrap;
+        }
+
+        .tag {
+            background: rgba(255, 255, 255, 0.05);
+            padding: 0.2rem 0.6rem;
+            border-radius: 4px;
+            font-family: monospace;
+            font-size: 0.85rem;
+            color: #e2e8f0;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+        }
+
+        /* Raw JSON section */
+        .json-panel {
+            background: #060a13;
+            border-radius: 8px;
+            border: 1px solid rgba(255, 255, 255, 0.05);
+            margin-top: 1.5rem;
+            position: relative;
+        }
+
+        .json-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 0.75rem 1rem;
+            background: rgba(255, 255, 255, 0.02);
+            border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+            font-size: 0.8rem;
+            color: var(--text-muted);
+        }
+
+        .copy-btn {
+            background: transparent;
+            border: 1px solid var(--text-muted);
+            color: var(--text-main);
+            padding: 0.3rem 0.7rem;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 0.75rem;
+            transition: all 0.2s;
+        }
+
+        .copy-btn:hover {
+            background: var(--accent-blue);
+            border-color: var(--accent-blue);
+            color: var(--bg-color);
+            font-weight: bold;
+        }
+
+        pre {
+            padding: 1.25rem;
+            overflow-x: auto;
+            font-family: 'Courier New', Courier, monospace;
+            font-size: 0.9rem;
+            line-height: 1.5;
+        }
+
+        /* JSON syntax highlighting styles */
+        .j-key { color: var(--key-color); }
+        .j-string { color: var(--string-color); }
+        .j-punct { color: #fff; }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <header>
+        <div class="title-area">
+            <h1>OpenID Connect Discovery</h1>
+            <p>GET /.well-known/openid-configuration</p>
+        </div>
+        <div class="badge">OIDC Active</div>
+    </header>
+
+    <div class="endpoints-grid">
+        <div class="endpoint-row">
+            <span class="key-label">issuer</span>
+            <a href="http://localhost:5000" class="value-uri">http://localhost:5000</a>
+        </div>
+        <div class="endpoint-row">
+            <span class="key-label">authorization_endpoint</span>
+            <a href="http://localhost:5000/o/authorize" class="value-uri">http://localhost:5000/o/authorize</a>
+        </div>
+        <div class="endpoint-row">
+            <span class="key-label">token_endpoint</span>
+            <a href="http://localhost:5000/o/token" class="value-uri">http://localhost:5000/o/token</a>
+        </div>
+        <div class="endpoint-row">
+            <span class="key-label">userinfo_endpoint</span>
+            <a href="http://localhost:5000/o/userinfo" class="value-uri">http://localhost:5000/o/userinfo</a>
+        </div>
+        <div class="endpoint-row">
+            <span class="key-label">jwks_uri</span>
+            <a href="http://localhost:5000/.well-known/jwks.json" class="value-uri">http://localhost:5000/.well-known/jwks.json</a>
+        </div>
+        <div class="endpoint-row">
+            <span class="key-label">response_types_supported</span>
+            <div class="array-tags"><span class="tag">"code"</span></div>
+        </div>
+        <div class="endpoint-row">
+            <span class="key-label">subject_types_supported</span>
+            <div class="array-tags"><span class="tag">"public"</span></div>
+        </div>
+        <div class="endpoint-row">
+            <span class="key-label">id_token_signing_alg_values...</span>
+            <div class="array-tags"><span class="tag">"RS256"</span></div>
+        </div>
+        <div class="endpoint-row">
+            <span class="key-label">scopes_supported</span>
+            <div class="array-tags">
+                <span class="tag">"openid"</span>
+                <span class="tag">"profile"</span>
+                <span class="tag">"email"</span>
+            </div>
+        </div>
+        <div class="endpoint-row">
+            <span class="key-label">token_endpoint_auth_methods...</span>
+            <div class="array-tags"><span class="tag">"client_secret_post"</span></div>
+        </div>
+    </div>
+
+    <div class="json-panel">
+        <div class="json-header">
+            <span>RAW DISCOVERY PAYLOAD</span>
+            <button class="copy-btn" onclick="copyJson()">Copy JSON</button>
+        </div>
+        <pre id="json-block"></pre>
+    </div>
+</div>
+
+<script>
+    // Exact requested configuration configuration block
+    const configData = {
+        "issuer": "http://localhost:5000",
+        "authorization_endpoint": "http://localhost:5000/o/authorize",
+        "token_endpoint": "http://localhost:5000/o/token",
+        "userinfo_endpoint": "http://localhost:5000/o/userinfo",
+        "jwks_uri": "http://localhost:5000/.well-known/jwks.json",
+        "response_types_supported": ["code"],
+        "subject_types_supported": ["public"],
+        "id_token_signing_alg_values_supported": ["RS256"],
+        "scopes_supported": ["openid", "profile", "email"],
+        "token_endpoint_auth_methods_supported": ["client_secret_post"]
+    };
+
+    // Syntax highlighter helper logic 
+    function syntaxHighlight(json) {
+        if (typeof json !== 'string') {
+             json = JSON.stringify(json, undefined, 2);
+        }
+        return json.replace(/("(\\u[a-zA-Z0-9]{4}|\\[^u]|[^\\"])*"(\s*:)?|\b(true|false|null)\b|-?\d+(?:\.\d*)?(?:[eE][+\-]?\d+)?)/g, function (match) {
+            let cls = 'j-string';
+            if (/^"/.test(match)) {
+                if (/:$/.test(match)) {
+                    cls = 'j-key';
+                }
+            }
+            return `<span class="${cls}">${match}</span>`;
+        });
+    }
+
+    // Render formatted view on load
+    document.getElementById('json-block').innerHTML = syntaxHighlight(configData);
+
+    // Copy utilities implementation
+    function copyJson() {
+        const cleanText = JSON.stringify(configData, null, 2);
+        navigator.clipboard.writeText(cleanText).then(() => {
+            const btn = document.querySelector('.copy-btn');
+            btn.innerText = "Copied!";
+            setTimeout(() => btn.innerText = "Copy JSON", 2000);
+        });
+    }
+</script>
+</body>
+</html>

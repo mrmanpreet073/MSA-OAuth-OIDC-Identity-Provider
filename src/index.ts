@@ -5,17 +5,28 @@ import bcrypt from "bcrypt";
 import crypto from "crypto";
 import JWT from "jsonwebtoken";
 import jose from "node-jose";
-import { eq } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 import { db } from "./db/index.js";
-import { usersTable } from "./db/schema.js";
+import { usersTable } from "./db/UserTable.js";
 import { PRIVATE_KEY, PUBLIC_KEY } from "./utils/cert.js";
 import type { JWTClaims } from "./utils/jwtTypes.js";
-import { oauthClientsTable } from "./db/schema2.js";
+import { oauthClientsTable } from "./db/ClientTable.js";
 import { log } from "console";
+import { refreshTokensTable } from "./db/RefTokenTable.js";
+import { sessionsTable } from "./db/SessionTable.js";
+import cors from "cors";
 
 
 
 const app = express();
+
+
+// 2. Enable CORS for your frontend origin
+app.use(cors({
+  origin: 'http://localhost:3000',
+  credentials: true
+}));
+
 
 app.use(cookieParser());
 app.use(express.json());
@@ -37,6 +48,14 @@ type AuthCode = {
   redirectUri: string;
   expiresAt: number;
 };
+type PendingAuthorization = {
+  userId: string;
+  clientId: string;
+  redirectUri: string;
+  state?: string;
+};
+
+const pendingAuthorizations = new Map<string, PendingAuthorization>();
 
 // ======================================================
 // Temporary In-Memory Authorization Code Store
@@ -58,18 +77,23 @@ app.get("/", (_: Request, res: Response) => {
 
 app.get("/.well-known/openid-configuration", (_: Request, res: Response) => {
 
-  return res.json({
-    issuer: ISSUER,
-    authorization_endpoint: `${ISSUER}/o/authorize`,
-    token_endpoint: `${ISSUER}/o/token`,
-    userinfo_endpoint: `${ISSUER}/o/userinfo`,
-    jwks_uri: `${ISSUER}/.well-known/jwks.json`,
-    response_types_supported: ["code"],
-    subject_types_supported: ["public"],
-    id_token_signing_alg_values_supported: ["RS256"],
-    scopes_supported: ["openid", "profile", "email"],
-    token_endpoint_auth_methods_supported: ["client_secret_post"]
+  return res.sendFile("configuration.html", {
+    root: "./public"
   });
+
+  // return res.json({
+  //   issuer: ISSUER,
+  //   authorization_endpoint: `${ISSUER}/o/authorize`,
+  //   token_endpoint: `${ISSUER}/o/token`,
+  //   userinfo_endpoint: `${ISSUER}/o/userinfo`,
+  //   // refresh_token_endpoint: `${ISSUER}/o/refresh`,
+  //   jwks_uri: `${ISSUER}/.well-known/jwks.json`,
+  //   response_types_supported: ["code"],
+  //   subject_types_supported: ["public"],
+  //   id_token_signing_alg_values_supported: ["RS256"],
+  //   scopes_supported: ["openid", "profile", "email"],
+  //   token_endpoint_auth_methods_supported: ["client_secret_post"]
+  // });
 }
 );
 
@@ -79,6 +103,12 @@ app.get("/.well-known/openid-configuration", (_: Request, res: Response) => {
 
 app.get("/home", (_: Request, res: Response) => {
   res.sendFile("home.html", {
+    root: "./public"
+  });
+});
+
+app.get("/docs", (_: Request, res: Response) => {
+  res.sendFile("oidc-auth.html", {
     root: "./public"
   });
 });
@@ -99,43 +129,78 @@ app.post("/signup", async (req: Request, res: Response) => {
     firstName,
     lastName,
     email,
-    password
+    password,
+    client_id,
+    redirect_uri,
+    state
   } = req.body;
 
-  if (
-    !firstName ||
-    !lastName ||
-    !email ||
-    !password
-  ) {
-    return res.status(400).json({
-      message: "All fields are required"
-    });
-  }
+    if (
+      !firstName ||
+      !lastName ||
+      !email ||
+      !password
+    ) {
+      return res.status(400).json({
+        message: "All fields are required"
+      });
+    }
 
-  const [existingUser] = await db
-    .select()
-    .from(usersTable)
-    .where(eq(usersTable.email, email))
-    .limit(1);
+    const [existingUser] = await db
+      .select()
+      .from(usersTable)
+      .where(eq(usersTable.email, email))
+      .limit(1);
 
-  if (existingUser) {
-    return res.status(400).send(
-      "User already exists"
+    if (existingUser) {
+      return res.status(400).send(
+        "User already exists"
+      );
+    }
+
+    const hashedPassword = await bcrypt.hash(password, 10);
+
+    const [user] = await db.insert(usersTable).values({
+      firstName,
+      lastName,
+      email,
+      password: hashedPassword
+    }).returning();
+
+    const newSessionId = crypto.randomBytes(32).toString("hex");
+
+    await db
+      .insert(sessionsTable)
+      .values({
+        sessionId: newSessionId,
+        userId: user!.id,
+        expiresAt: new Date(Date.now() + 1000 * 60 * 5) // Session valid for 5 minutes
+      });
+
+    res.cookie("session", newSessionId,
+      {
+        httpOnly: true,
+        secure: process.env.NODE_ENV === "production",
+        sameSite: "lax",
+        maxAge: 1000 * 60 * 2 // 2 minutes
+      }
     );
+
+
+    const consentId = crypto.randomBytes(32).toString("hex");
+
+    pendingAuthorizations.set(consentId, {
+      userId: user?.id as string,
+      clientId: client_id,
+      redirectUri: redirect_uri,
+      state
+    });
+
+    return res.redirect(`/o/consent?consent_id=${consentId}`);
+
   }
 
-  const hashedPassword = await bcrypt.hash(password, 10);
 
-  await db.insert(usersTable).values({
-    firstName,
-    lastName,
-    email,
-    password: hashedPassword
-  });
-
-  return res.send("User registered");
-}
 );
 
 // ======================================================
@@ -187,14 +252,32 @@ app.get("/o/authorize", async (req: Request, res: Response) => {
   // Validate Redirect URI
   // ============================
 
-  if (
-    client.redirectUri !==
-    redirect_uri
-  ) {
+  if (client.redirectUri !== redirect_uri) {
 
     return res.status(400).send(
       "Invalid redirect URI"
     );
+  }
+
+  const sessionId = req.cookies.session;
+
+  if (sessionId) {
+    const [session] = await db.select().from(sessionsTable)
+      .where(eq(sessionsTable.sessionId, sessionId)).limit(1);
+
+    if (session && session.expiresAt > new Date()) {
+
+      // Session valid → skip login, go to consent
+      const consentId = crypto.randomBytes(32).toString("hex");
+
+      pendingAuthorizations.set(consentId, {
+        userId: session.userId,
+        clientId: String(client_id),
+        redirectUri: String(redirect_uri),
+
+      });
+      return res.redirect(`/o/consent?consent_id=${consentId}`);
+    }
   }
 
   // ============================
@@ -219,69 +302,481 @@ app.post("/o/authorize", async (req: Request, res: Response) => {
     state
   } = req.body;
 
-  if (
-    !email ||
-    !password ||
-    !client_id ||
-    !redirect_uri
-  ) {
-    return res.status(400).send(
-      "Missing required fields"
-    );
+  let user;
+
+  const sessionId = req.cookies.session;
+
+  // ============================
+  // Existing Session
+  // ============================
+
+  if (sessionId) {
+
+    const [session] = await db
+      .select()
+      .from(sessionsTable)
+      .where(
+        eq(
+          sessionsTable.sessionId,
+          sessionId
+        )
+      )
+      .limit(1);
+
+    if (session && session.expiresAt > new Date()) {
+
+      const [sessionUser] = await db
+        .select()
+        .from(usersTable)
+        .where(
+          eq(
+            usersTable.id,
+            session.userId
+          )
+        )
+        .limit(1);
+
+      if (sessionUser) {
+        user = sessionUser;
+      }
+    }
   }
 
-  const [user] = await db
-    .select()
-    .from(usersTable)
-    .where(eq(usersTable.email, email))
-    .limit(1);
+  // ============================
+  // No Session -> Login Required
+  // ============================
 
   if (!user) {
-    return res.status(401).send(
-      "User not found"
+
+    if (
+      !email ||
+      !password ||
+      !client_id ||
+      !redirect_uri
+    ) {
+      return res.status(400).send(
+        "Missing required fields"
+      );
+    }
+
+    const [dbUser] = await db
+      .select()
+      .from(usersTable)
+      .where(
+        eq(
+          usersTable.email,
+          email
+        )
+      )
+      .limit(1);
+
+    if (!dbUser) {
+      return res.status(401).send(
+        "User not found"
+      );
+    }
+
+    const isMatch = await bcrypt.compare(
+      password,
+      dbUser.password!
+    );
+
+    if (!isMatch) {
+      return res.status(401).send(
+        "Invalid credentials"
+      );
+    }
+
+    user = dbUser;
+
+    // ============================
+    // Create Session
+    // ============================
+
+    const newSessionId = crypto.randomBytes(32).toString("hex");
+
+    await db
+      .insert(sessionsTable)
+      .values({
+        sessionId: newSessionId,
+        userId: user.id,
+        expiresAt: new Date(Date.now() + 1000 * 60 * 5) // Session valid for 5 minutes
+      });
+
+    res.cookie("session", newSessionId,
+      {
+        httpOnly: true,
+        secure: process.env.NODE_ENV === "production",
+        sameSite: "lax",
+        maxAge: 1000 * 60 * 2 // 2 minutes
+      }
     );
   }
 
-  const isMatch = await bcrypt.compare(
-    password,
-    user.password!
+  //validate client_id and redirect_uri again in case someone tries to forge a request to this endpoint without logging in first
+  if (!client_id || !redirect_uri) {
+    return res.status(400).send("Missing client_id or redirect_uri");
+  }
+
+  const [client] = await db.select().from(oauthClientsTable)
+    .where(eq(oauthClientsTable.clientId, client_id)).limit(1);
+
+  if (!client) return res.status(400).send("Invalid client");
+
+  if (client.redirectUri !== redirect_uri) {
+    return res.status(400).send("Invalid redirect URI");
+  }
+  // ============================
+  // Create Consent Request
+  // ============================
+
+  const consentId = crypto.randomBytes(32).toString("hex");
+
+  pendingAuthorizations.set(consentId,
+    {
+      userId: user.id,
+      clientId: client_id,
+      redirectUri: redirect_uri,
+      state
+    }
   );
 
-  if (!isMatch) {
-    return res.status(401).send(
-      "Invalid credentials"
+  return res.redirect(`/o/consent?consent_id=${consentId}`
+  );
+});
+app.post("/logout", async (req, res) => {
+
+  const sessionId =
+    req.cookies.session;
+
+  if (sessionId) {
+
+    await db
+      .delete(sessionsTable)
+      .where(
+        eq(
+          sessionsTable.sessionId,
+          sessionId
+        )
+      );
+  }
+
+  res.clearCookie("session");
+
+  return res.json({
+    message:
+      "Logged out successfully"
+  });
+
+});
+
+app.get("/o/consent", async (req, res) => {
+
+  const consentId = req.query.consent_id as string;
+
+  const pending = pendingAuthorizations.get(consentId);
+
+  if (!pending) {
+    return res.status(400).send(
+      "Invalid consent request"
     );
   }
 
-  // Generate Authorization Code
+  const [client] = await db
+    .select()
+    .from(oauthClientsTable)
+    .where(
+      eq(
+        oauthClientsTable.clientId,
+        pending.clientId
+      )
+    )
+    .limit(1);
+
+  if (!client) {
+    return res.status(400).send(
+      "Client not found"
+    );
+  }
+
+  return res.send(`
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Consent</title>
+
+<style>
+
+*{
+  margin:0;
+  padding:0;
+  box-sizing:border-box;
+  font-family:Inter,Segoe UI,sans-serif;
+}
+
+body{
+  min-height:100vh;
+  display:flex;
+  justify-content:center;
+  align-items:center;
+  background:#0f172a;
+  color:#f8fafc;
+}
+
+.card{
+  width:100%;
+  max-width:500px;
+  background:#1e293b;
+  border:1px solid #334155;
+  border-radius:18px;
+  padding:32px;
+  box-shadow:0 20px 40px rgba(0,0,0,.35);
+}
+
+.logo{
+  width:70px;
+  height:70px;
+  margin:0 auto 20px;
+  border-radius:50%;
+  background:#2563eb;
+  display:flex;
+  justify-content:center;
+  align-items:center;
+  font-size:30px;
+  font-weight:bold;
+}
+
+h2{
+  text-align:center;
+  margin-bottom:10px;
+}
+
+.subtitle{
+  text-align:center;
+  color:#94a3b8;
+  line-height:1.6;
+  margin-bottom:25px;
+}
+
+.app{
+  color:#60a5fa;
+  font-weight:600;
+}
+
+.permissions{
+  margin-top:20px;
+}
+
+.permissions h3{
+  margin-bottom:15px;
+}
+
+.permission{
+  display:flex;
+  align-items:center;
+  gap:12px;
+  padding:14px;
+  background:#0f172a;
+  border:1px solid #334155;
+  border-radius:12px;
+  margin-bottom:12px;
+}
+
+.permission-icon{
+  font-size:20px;
+}
+
+.permission-text{
+  color:#cbd5e1;
+}
+
+.warning{
+  margin-top:20px;
+  padding:14px;
+  border-radius:12px;
+  background:#172554;
+  border:1px solid #1d4ed8;
+  color:#bfdbfe;
+  font-size:14px;
+}
+
+.actions{
+  display:flex;
+  gap:12px;
+  margin-top:25px;
+}
+
+button{
+  flex:1;
+  border:none;
+  border-radius:12px;
+  padding:12px;
+  font-size:15px;
+  font-weight:600;
+  cursor:pointer;
+  transition:.2s;
+}
+
+.allow{
+  background:#2563eb;
+  color:white;
+}
+
+.allow:hover{
+  background:#1d4ed8;
+}
+
+.deny{
+  background:#334155;
+  color:white;
+}
+
+.deny:hover{
+  background:#475569;
+}
+
+.footer{
+  text-align:center;
+  color:#64748b;
+  margin-top:20px;
+  font-size:13px;
+}
+
+</style>
+</head>
+
+<body>
+
+<div class="card">
+
+  <div class="logo">O</div>
+
+  <h2>Authorize Application</h2>
+
+  <p class="subtitle">
+    <span class="app">${client.appName}</span>
+    is requesting permission to access your account.
+  </p>
+
+  <div class="permissions">
+
+    <h3>Requested Access</h3>
+
+    <div class="permission">
+      <div class="permission-icon">👤</div>
+      <div class="permission-text">
+        View your profile information
+      </div>
+    </div>
+
+    <div class="permission">
+      <div class="permission-icon">📧</div>
+      <div class="permission-text">
+        Access your email address
+      </div>
+    </div>
+
+    <div class="permission">
+      <div class="permission-icon">🔐</div>
+      <div class="permission-text">
+        Sign you in using OpenID Connect
+      </div>
+    </div>
+
+  </div>
+
+  <div class="warning">
+    Only continue if you trust this application.
+  </div>
+
+  <form action="/o/consent" method="POST">
+
+    <input
+      type="hidden"
+      name="consent_id"
+      value="${consentId}"
+    >
+
+    <div class="actions">
+
+      <button
+        type="submit"
+        name="decision"
+        value="deny"
+        class="deny"
+      >
+        Deny
+      </button>
+
+      <button
+        type="submit"
+        name="decision"
+        value="allow"
+        class="allow"
+      >
+        Allow Access
+      </button>
+
+    </div>
+
+  </form>
+
+  <div class="footer">
+    OAuth 2.0 Authorization Request
+  </div>
+
+</div>
+
+</body>
+</html>
+`);
+});
+app.post("/o/consent", async (req, res) => {
+
+  const { consent_id, decision } = req.body;
+
+  const pending = pendingAuthorizations.get(consent_id);
+
+  if (!pending) {
+    return res.status(400).send(
+      "Invalid consent"
+    );
+  }
+
+  pendingAuthorizations.delete(consent_id);
+
+  if (decision === "deny") {
+
+    return res.redirect(`${pending.redirectUri}?error=access_denied`
+    );
+  }
 
   const code = crypto.randomBytes(32).toString("hex");
 
-  console.log("Generated Authorization Code:", code);
-
+  //
 
   authorizationCodes.set(code, {
     code,
-    userId: user.id,
-    clientId: client_id,
-    redirectUri: redirect_uri,
-    expiresAt:
-      Date.now() + 1000 * 60 * 5
+    userId: pending.userId,
+    clientId: pending.clientId,
+    redirectUri: pending.redirectUri,
+    expiresAt: Date.now() + 1000 * 60 * 5 // Code valid for 5 minutes
   });
 
 
-  // Redirect back to client
 
-  const redirectURL = `${redirect_uri}?code=${code}&state=${state}`;
 
-  // console.log(redirectURL);
+  // redirect to callback with code and state
+  //where code is exchange for access token and id token and state is used to prevent csrf attack
 
-  return res.redirect(redirectURL);
-}
-);
+  // return res.redirect(`${pending.redirectUri}?code=${code}&state=${pending.state}`);
+  return res.redirect(`${pending.redirectUri}?code=${code}`);
+});
 
 // ======================================================
-// OAuth2 Token Endpoint
+// OAuth2 Token Endpoint + Refresh Endpoint
 // ======================================================
 
 app.post("/o/token", async (req: Request, res: Response) => {
@@ -289,125 +784,318 @@ app.post("/o/token", async (req: Request, res: Response) => {
   const {
     code,
     client_id,
+    client_secret,
     redirect_uri,
-    grant_type
+    grant_type,
+    // refresh_token
   } = req.body;
 
-  console.log("Token Request:", {
-    code,
-    client_id,
-    redirect_uri,
-    grant_type
-  });
-  console.log("Current Authorization Codes:", Array.from(authorizationCodes.values()));
-  if (grant_type !== "authorization_code") {
+
+  if (!client_id || !client_secret) {
+    return res.status(400).json({ error: "invalid_client0" });
+  }
+  if (
+    grant_type !== "authorization_code" &&
+    grant_type !== "refresh_token"
+  ) {
     return res.status(400).json({
       error: "unsupported_grant_type"
     });
   }
 
-  const storedCode = authorizationCodes.get(code);// code apna hi he ??
+  // =====================================
+  // AUTHORIZATION CODE FLOW
+  // =====================================
 
-  if (!storedCode) {
-    return res.status(400).json({
-      error: "invalid_code"
-    });
-  }
+  if (grant_type === "authorization_code") {
 
-  // Expired
+    const storedCode = authorizationCodes.get(code);
 
-  if (storedCode.expiresAt < Date.now()) {
+    if (!storedCode) {
+      return res.status(400).json({
+        error: "invalid_code"
+      });
+    }
+
+    if (storedCode.expiresAt < Date.now()) { // Prevents someone from using an old code hours later.
+
+      authorizationCodes.delete(code);
+
+      return res.status(400).json({
+        error: "authorization_code_expired"
+      });
+    }
+
+    const [client] = await db
+      .select()
+      .from(oauthClientsTable)
+      .where(
+        eq(
+          oauthClientsTable.clientId,
+          client_id
+        )
+      )
+      .limit(1);
+
+    if (!client) {
+      return res.status(400).json({
+        error: "invalid_client"
+      });
+    }
+
+    const hashedClientSecret = crypto
+      .createHash("sha256")
+      .update(client_secret)
+      .digest("hex");
+
+    if (client.clientSecret !== hashedClientSecret) {
+      return res.status(400).json({ error: "invalid_client" });
+    }
+
+    if (
+      storedCode.clientId !== client_id || //Does it belong to this client?
+      storedCode.redirectUri !== redirect_uri //Prevents a stolen code from being redeemed through a different callback URL.
+    ) {
+      return res.status(400).json({
+        error: "invalid_client"
+      });
+    }
 
     authorizationCodes.delete(code);
 
-    return res.status(400).json({
-      error: "authorization_code_expired"
-    });
+    const [user] = await db
+      .select()
+      .from(usersTable)
+      .where(
+        eq(
+          usersTable.id,
+          storedCode.userId  //Which user logged in?
+        )
+      )
+      .limit(1);
 
-  }
-
-  // Validate Client
-
-  if (
-    storedCode.clientId !== client_id ||
-    storedCode.redirectUri !== redirect_uri
-  ) {
-    return res.status(400).json({
-      error: "invalid_client"
-    });
-  }
-
-  // One Time Use
-
-  authorizationCodes.delete(code);
-
-  // Fetch User
-
-  const [user] = await db
-    .select()
-    .from(usersTable)
-    .where(eq(usersTable.id, storedCode.userId))
-    .limit(1);
-
-  if (!user) {
-    return res.status(404).send(
-      "User not found"
-    );
-  }
-
-  // JWT Claims
-
-  const now = Math.floor(
-    Date.now() / 1000
-  );
-
-  const claims: JWTClaims = {
-    iss: ISSUER,
-    sub: user.id,
-    aud: client_id,
-    email: user.email,
-    email_verified: String(user.emailVerified),
-    iat: now,
-    exp: now + 3600,
-    given_name: user.firstName ?? "",
-    family_name: user.lastName ?? undefined,
-    name: [user.firstName, user.lastName].filter(Boolean).join(" "),
-    picture: user.profileImageURL ?? undefined
-  };
-
-  // Access Token
-
-  const accessToken = JWT.sign(claims, PRIVATE_KEY, { algorithm: "RS256" });
-
-  // ID Token
-
-  const idToken = JWT.sign(claims, PRIVATE_KEY, { algorithm: "RS256" });
-
-  const refreshToken =
-    crypto
-      .randomBytes(64)
-      .toString("hex");
-
-  // Store In Cookie
-
-  res.cookie("refresh_token", refreshToken,
-    {
-      httpOnly: true,
-      secure: false,
-      sameSite: "lax", //Protects against many CSRF attacks.
-      maxAge: 1000 * 60 * 60 * 24 * 7 // 7 days
+    if (!user) {
+      return res.status(404).json({
+        error: "user_not_found"
+      });
     }
-  );
+
+    const now = Math.floor(Date.now() / 1000);
+
+    const claims: JWTClaims = {
+      iss: ISSUER,
+      sub: user.id,
+      aud: client_id,
+      email: user.email,
+      email_verified: user.emailVerified,
+      iat: now,
+      exp: now + 120, // 2 minutes
+      given_name: user.firstName ?? "",
+      family_name: user.lastName ?? undefined,
+      name: [user.firstName, user.lastName]
+        .filter(Boolean)
+        .join(" "),
+      picture: user.profileImageURL ?? undefined
+    };
+
+    const accessToken = JWT.sign(claims, PRIVATE_KEY, { algorithm: "RS256" });
+
+    const idToken = JWT.sign(claims, PRIVATE_KEY, { algorithm: "RS256" });
+
+    const refreshToken = crypto.randomBytes(64).toString("hex");
+
+    console.log("Generated Refresh Token:", refreshToken);
+
+    const tokenHash = crypto
+      .createHash("sha256")
+      .update(refreshToken)
+      .digest("hex");
+
+    console.log("Hashed Refresh Token:", tokenHash);
+
+    //////////////////////////////////////////////////////////////////////////////////////////////
+    await db
+      .insert(refreshTokensTable)
+      .values({
+        userId: user.id,
+        clientId: client_id,
+        tokenHash,
+        expiresAt: new Date(Date.now() + 1000 * 60 * 10) // 10 mins 
+      });
+    console.log(
+      "Stored refresh token in database with hash:",
+      tokenHash
+    );
+    /////////////////////////////////////////////////////////////////////////////////////////////////
+    // REFRESH TOKEN 
+    res.clearCookie("refresh_token", {
+      path: "/"
+    });
+
+    res.cookie("refresh_token", refreshToken,
+      {
+        httpOnly: true,
+        secure: false,
+        sameSite: "lax",
+        path: "/",
+        maxAge: 1000 * 60 * 10 //
+      }
+    );
+    /////////////////////////////////////////////////////////////////////////////////////
+
+    console.log(
+      "REFRESH TOKEN  cookie in authorization :",
+      req.cookies.refresh_token
+    );
+
+    return res.json({
+      access_token: accessToken,
+      token_type: "Bearer",
+      id_token: idToken,
+      refresh_token: refreshToken,
+      expires_in: 120 // 2 minutes
+    });
+  }
+
+  // =====================================
+  // REFRESH TOKEN FLOW
+  // =====================================
+
+  if (grant_type === "refresh_token") {
 
 
-  return res.json({
-    access_token: accessToken,
-    token_type: "Bearer",
-    id_token: idToken,
-    expires_in: 3600,
-  });
-}
-);
+    const refresh_token = req.cookies.refresh_token;
+
+    console.log("Cookie Token:", refresh_token);
+
+    if (!refresh_token) {
+      return res.status(400).json({
+        error: "invalid_request"
+      });
+    }
+
+
+
+    const [client] = await db
+      .select()
+      .from(oauthClientsTable)
+      .where(
+        eq(
+          oauthClientsTable.clientId,
+          client_id
+        )
+      )
+      .limit(1);
+
+
+    if (!client) {
+      return res.status(400).json({
+        error: "invalid_client1"
+      });
+    }
+
+
+
+
+    const hashedClientSecret = crypto
+      .createHash("sha256")
+      .update(client_secret)
+      .digest("hex");
+
+    if (
+      client.clientSecret !== hashedClientSecret
+    ) {
+      return res.status(400).json({
+        error: "invalid_client2"
+      });
+    }
+
+    const tokenHash = crypto // Hash the incoming refresh token to compare with stored hash
+      .createHash("sha256")
+      .update(refresh_token)
+      .digest("hex");
+
+    console.log("Token Hash:", tokenHash);
+
+    const [storedToken] = await db // 
+      .select()
+      .from(refreshTokensTable)
+      .where(
+        and(
+          eq(refreshTokensTable.tokenHash, tokenHash), // Find token by hash
+          eq(refreshTokensTable.clientId, client_id) // Ensure token belongs to the client
+        )
+      )
+      .limit(1);
+
+    console.log("Stored Token:", storedToken);
+
+    if (!storedToken) {
+      return res.status(401).json({
+        error: "invalid_grant"
+      });
+    }
+
+    if (storedToken.expiresAt &&
+      storedToken.expiresAt < new Date()
+    ) {
+
+      await db
+        .delete(refreshTokensTable)
+        .where(
+          eq(
+            refreshTokensTable.id,
+            storedToken.id
+          )
+        );
+
+      return res.status(401).json({
+        error:
+          "refresh_token_expired"
+      });
+    }
+
+    const [user] = await db //  Find the user associated with this refresh token
+      .select()
+      .from(usersTable)
+      .where(eq(usersTable.id, storedToken.userId))
+      .limit(1);
+
+    if (!user) {
+      return res.status(404).json({
+        error: "user_not_found"
+      });
+    }
+
+    const now = Math.floor(Date.now() / 1000);
+
+    const claims: JWTClaims = {
+
+      iss: ISSUER,
+      sub: user.id,
+      aud: client_id,
+      email: user.email,
+      email_verified: user.emailVerified,
+      iat: now,
+      exp: now + 120, //
+      given_name: user.firstName ?? "",
+      family_name: user.lastName ?? undefined,
+      name: [user.firstName, user.lastName].filter(Boolean).join(" "),
+      picture: user.profileImageURL ?? undefined
+    };
+
+    const accessToken = JWT.sign(claims, PRIVATE_KEY, { algorithm: "RS256" });
+
+
+    return res.json({
+      access_token: accessToken,
+      // refresh_token: newRefreshToken,
+      token_type: "Bearer",
+      expires_in: 300 // 5 minutes
+    });
+  }
+
+});
 
 // ======================================================
 // UserInfo Endpoint
@@ -459,25 +1147,54 @@ app.get("/o/userinfo", (req: Request, res: Response) => {
 // JWKS Endpoint
 // ======================================================
 
-app.get("/.well-known/jwks.json", async (_: Request, res: Response) => {
+// app.get("/.well-known/jwks.json", async (_: Request, res: Response) => {
 
+//   res.sendFile("jwks.html", {
+//     root: "./public"
+//   });
+// },
+
+
+
+
+//   //   or====================================================
+
+//   //   app.get("/.well-known/jwks.json", (_, res) => {
+//   //   const key = crypto.createPublicKey(PUBLIC_KEY);
+//   //   const jwk = key.export({ format: "jwk" });
+//   //   return res.json({ keys: [jwk] });
+//   // });
+
+
+//   // This code snippet is used to convert a public key from the PEM format 
+//   // (a widely used text format for cryptographic keys) into a JWK (JSON Web Key)
+//   //  format, and then return it as a JSON response.
+
+
+// );
+
+app.get("/.well-known/jwks.json", async (req: Request, res: Response) => {
+
+  // 1. If a browser visits the page, send the HTML dashboard
+  if (req.headers.accept && req.headers.accept.includes('text/html')) {
+    return res.sendFile("jwks.html", { root: "./public" });
+  }
+
+  // 2. If an OIDC library (or your frontend fetch) asks for JSON via GET, send the raw keys!
+  try {
+    const key = await jose.JWK.asKey(PUBLIC_KEY, "pem");
+    res.setHeader('Content-Type', 'application/json');
+    return res.json({ keys: [key.toJSON()] });
+  } catch (error) {
+    return res.status(500).json({ error: "Failed to compile keys" });
+  }
+});
+
+// Optional: Keep your POST route active so your existing fetch code doesn't break
+app.post("/.well-known/jwks.json", async (_: Request, res: Response) => {
   const key = await jose.JWK.asKey(PUBLIC_KEY, "pem");
-
   return res.json({ keys: [key.toJSON()] });
-}
-
-
-  //   or====================================================
-
-  //   app.get("/.well-known/jwks.json", (_, res) => {
-  //   const key = crypto.createPublicKey(PUBLIC_KEY);
-  //   const jwk = key.export({ format: "jwk" });
-  //   return res.json({ keys: [jwk] });
-  // });
-
-
-
-);
+});
 
 app.get("/o/register-client", async (req: Request, res: Response) => {
   return res.sendFile("register.html", {
@@ -511,12 +1228,14 @@ app.post("/o/register-client", async (req: Request, res: Response) => {
     // Generate Client Credentials
     // ====================================
 
-    const clientId =
-      crypto.randomBytes(16).toString("hex");
+    const clientId = crypto.randomBytes(16).toString("hex");
 
-    const clientSecret =
-      crypto.randomBytes(32).toString("hex");
+    const clientSecret = crypto.randomBytes(32).toString("hex");
 
+    const hashedSecret = crypto
+      .createHash("sha256")
+      .update(clientSecret)
+      .digest("hex");
     // ====================================
     // Save Client In Database
     // ====================================
@@ -525,11 +1244,10 @@ app.post("/o/register-client", async (req: Request, res: Response) => {
       .values({
         appName,
         clientId,
-        clientSecret,
+        clientSecret: hashedSecret,
         redirectUri,
         scope: scope || "openid profile email",
-        responseType:
-          responseType || "code"
+        responseType: responseType || "code"
       });
 
     // ====================================
@@ -543,8 +1261,7 @@ app.post("/o/register-client", async (req: Request, res: Response) => {
       client_secret: clientSecret,
       redirect_uri: redirectUri,
       scope: scope || "openid profile email",
-      response_type:
-        responseType || "code"
+      response_type: responseType || "code"
     });
 
   } catch (error) {
@@ -559,89 +1276,6 @@ app.post("/o/register-client", async (req: Request, res: Response) => {
 }
 );
 
-app.post("/o/refresh", async (req: Request, res: Response) => {
-
-  // ============================
-  // Read Refresh Token Cookie
-  // ============================
-
-  const refreshToken = req.cookies.refresh_token;
-
-  if (!refreshToken) {
-
-    return res.status(401).json({
-      error:
-        "Refresh token missing"
-    });
-  }
-
-  // ============================
-  // OPTIONAL:
-  // Verify Refresh Token From DB
-  // ============================
-
-  // For now demo validation only
-
-  // In production:
-  // check DB/Redis
-
-  // ============================
-  // Generate New Access Token
-  // ============================
-
-  const ISSUER = `http://localhost:${PORT}`;
-
-  const now = Math.floor(Date.now() / 1000);
-
-  // Example demo user
-  // Replace with DB lookup
-
-  const [user] = await db
-    .select()
-    .from(usersTable)
-    .limit(1);
-
-  if (!user) {
-
-    return res.status(404).json({
-      error:
-        "User not found"
-    });
-  }
-
-  const claims: JWTClaims = {
-
-    iss: ISSUER,
-    sub: user.id,
-    aud: "client-app",
-    email: user.email,
-    email_verified: String(user.emailVerified),
-    iat: now,
-    exp: now + 3600,
-    given_name: user.firstName ?? "",
-    family_name: user.lastName ?? undefined,
-    name: [user.firstName, user.lastName].filter(Boolean).join(" "),
-    picture: user.profileImageURL ?? undefined
-  };
-
-  // ============================
-  // Create New Access Token
-  // ============================
-
-  const accessToken = JWT.sign(claims, PRIVATE_KEY, { algorithm: "RS256" });
-
-  // ============================
-  // Return New Access Token
-  // ============================
-
-  return res.json({
-
-    access_token: accessToken,
-    token_type: "Bearer",
-    expires_in: 3600
-  });
-}
-);
 
 // ======================================================
 // Start Server

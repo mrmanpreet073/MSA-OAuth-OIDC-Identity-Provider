@@ -1,0 +1,226 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Dynamic OIDC Discovery View</title>
+    <style>
+        :root {
+            --bg-color: #0a0f1d;
+            --card-bg: #111a30;
+            --accent-blue: #0094fe;
+            --neon-glow: #0072ff;
+            --text-main: #e2e8f0;
+            --text-muted: #64748b;
+            --string-color: #64fcce;
+            --key-color: #38bdf8;
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+            font-family: 'Segoe UI', Roboto, sans-serif;
+        }
+
+        body {
+            background-color: var(--bg-color);
+            color: var(--text-main);
+            min-height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            padding: 2rem;
+            background: radial-gradient(circle at 50% 50%, #142346 0%, var(--bg-color) 70%);
+        }
+
+        .container {
+            width: 100%;
+            max-width: 800px;
+            background: var(--card-bg);
+            border: 1px solid rgba(56, 189, 248, 0.15);
+            border-radius: 16px;
+            padding: 2.5rem;
+            box-shadow: 0 20px 40px rgba(0, 0, 0, 0.5), 0 0 50px rgba(0, 114, 255, 0.1);
+        }
+
+        header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 2rem;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+            padding-bottom: 1.5rem;
+        }
+
+        .title-area h1 {
+            font-size: 1.5rem;
+            font-weight: 600;
+            background: linear-gradient(135deg, #fff 0%, var(--accent-blue) 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+
+        .title-area p {
+            font-size: 0.875rem;
+            color: var(--text-muted);
+            margin-top: 0.25rem;
+            font-family: monospace;
+        }
+
+        .status-badge {
+            background: rgba(56, 189, 248, 0.1);
+            border: 1px solid var(--key-color);
+            color: var(--key-color);
+            padding: 0.4rem 0.8rem;
+            border-radius: 20px;
+            font-size: 0.75rem;
+            font-weight: bold;
+            text-transform: uppercase;
+        }
+
+        .json-panel {
+            background: #060a13;
+            border-radius: 8px;
+            border: 1px solid rgba(255, 255, 255, 0.05);
+            padding: 1.25rem;
+            min-height: 200px;
+        }
+
+        pre {
+            overflow-x: auto;
+            font-family: 'Courier New', Courier, monospace;
+            font-size: 0.95rem;
+            line-height: 1.5;
+        }
+
+        /* Loading Animation Styles */
+        .loading-spinner {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            height: 150px;
+            color: var(--key-color);
+            font-family: monospace;
+        }
+
+        .spinner {
+            border: 4px solid rgba(255, 255, 255, 0.1);
+            width: 36px;
+            height: 36px;
+            border-radius: 50%;
+            border-left-color: var(--accent-blue);
+            animation: spin 1s linear infinite;
+            margin-bottom: 1rem;
+        }
+
+        @keyframes spin {
+            0% {
+                transform: rotate(0deg);
+            }
+
+            100% {
+                transform: rotate(360deg);
+            }
+        }
+
+        .error-msg {
+            color: #ef4444;
+            font-family: monospace;
+            padding: 1rem;
+        }
+
+        /* JSON Highlighting rules */
+        .j-key {
+            color: var(--key-color);
+        }
+
+        .j-string {
+            color: var(--string-color);
+        }
+    </style>
+</head>
+
+<body>
+
+    <div class="container">
+        <header>
+            <div class="title-area">
+                <h1>OIDC Server Discovery</h1>
+                <p>GET http://localhost:5000/.well-known/openid-configuration</p>
+            </div>
+            <div id="status-text" class="status-badge">Connecting...</div>
+        </header>
+
+        <div class="json-panel" id="view-panel">
+            <div class="loading-spinner">
+                <div class="spinner"></div>
+                <div>INITIALIZING API REQUEST...</div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Syntax highlight utility function
+        function formatAndHighlight(jsonObj) {
+            const jsonString = JSON.stringify(jsonObj, undefined, 2);
+            return jsonString.replace(/("(\\u[a-zA-Z0-9]{4}|\\[^u]|[^\\"])*"(\s*:)?|\b(true|false|null)\b|-?\d+(?:\.\d*)?(?:[eE][+\-]?\d+)?)/g, function (match) {
+                let cls = 'j-string';
+                if (/^"/.test(match)) {
+                    if (/:$/.test(match)) {
+                        cls = 'j-key';
+                    }
+                }
+                return `<span class="${cls}">${match}</span>`;
+            });
+        }
+
+        // 🚀 EXECUTING FETCH ON PAGE LOAD
+        window.addEventListener('DOMContentLoaded', () => {
+            const viewPanel = document.getElementById('view-panel');
+            const statusText = document.getElementById('status-text');
+
+            // Fire the fetch payload request targeting your express server backend
+            fetch('/.well-known/jwks.json', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                }
+            })
+                .then(response => {
+                    if (!response.ok) {
+                        throw new Error(`Server returned HTTP Status ${response.status}`);
+                    }
+                    return response.json();
+                })
+                .then(data => {
+                    // Update header status indicators
+                    statusText.innerText = "SUCCESS 200";
+                    statusText.style.borderColor = "var(--string-color)";
+                    statusText.style.color = "var(--string-color)";
+                    statusText.style.background = "rgba(77, 253, 203, 0.1)";
+
+                    // Inject formatted syntax codeblock data inside DOM
+                    viewPanel.innerHTML = `<pre>${formatAndHighlight(data)}</pre>`;
+                })
+                .catch(error => {
+                    // Handle fallback errors
+                    statusText.innerText = "FAILED";
+                    statusText.style.borderColor = "#ef4444";
+                    statusText.style.color = "#ef4444";
+                    statusText.style.background = "rgba(239, 68, 68, 0.1)";
+
+                    viewPanel.innerHTML = `
+                    <div class="error-msg">
+                        [CRITICAL ERROR]: Could not communicate with authentication server.<br><br>
+                        Details: ${error.message}<br><br>
+                        👉 Ensure your Express application is active on port 5000 and has CORS enabled.
+                    </div>`;
+                });
+        });
+    </script>
+</body>
+
+</html>

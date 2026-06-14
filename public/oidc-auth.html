@@ -1,0 +1,1255 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>OIDC Provider — Developer Docs</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  :root {
+    --bg:        #0b1120;
+    --bg2:       #111827;
+    --bg3:       #1a2332;
+    --border:    rgba(99,120,160,0.18);
+    --border2:   rgba(99,120,160,0.32);
+    --text:      #e2e8f0;
+    --muted:     #7a8fa8;
+    --blue:      #3b82f6;
+    --blue-dim:  #1e40af;
+    --green:     #10b981;
+    --amber:     #f59e0b;
+    --red:       #ef4444;
+    --purple:    #8b5cf6;
+    --mono:      'JetBrains Mono', monospace;
+    --sans:      'Inter', sans-serif;
+  }
+
+
+  .reg{
+    color: var(--blue);
+    text-decoration: none;
+    font-size: 15px;
+    font-weight: 500;
+
+  }
+  .reg:hover{
+    color: #10b981;
+  }
+  html { scroll-behavior: smooth; }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: var(--sans);
+    font-size: 15px;
+    line-height: 1.7;
+    overflow-x: hidden;
+  }
+.note {
+    background: rgba(50, 245, 11, 0.12);
+    border-left: 4px solid var(--green);
+    padding: 16px;
+    border-radius: 6px;
+    margin-top: 20px;
+  }
+  .note strong {
+    color: var(--green);
+    font-size: 19px;
+    display: block;
+    margin-bottom: 8px;
+  }
+  /* ── Scrollbar ── */
+  ::-webkit-scrollbar { width: 6px; }
+  ::-webkit-scrollbar-track { background: var(--bg); }
+  ::-webkit-scrollbar-thumb { background: var(--border2); border-radius: 3px; }
+
+  /* ── Nav ── */
+  nav {
+    position: fixed;
+    top: 0; left: 0; right: 0;
+    z-index: 100;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0 40px;
+    height: 60px;
+    background: rgba(11,17,32,0.85);
+    backdrop-filter: blur(12px);
+    border-bottom: 1px solid var(--border);
+  }
+
+  .nav-brand {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    font-family: var(--mono);
+    font-size: 14px;
+    color: var(--blue);
+    text-decoration: none;
+  }
+
+  .nav-dot {
+    width: 8px; height: 8px;
+    border-radius: 50%;
+    background: var(--green);
+    animation: pulse 2s ease-in-out infinite;
+  }
+
+  @keyframes pulse {
+    0%,100% { opacity: 1; transform: scale(1); }
+    50%      { opacity: 0.5; transform: scale(0.8); }
+  }
+
+  .nav-links {
+    display: flex;
+    gap: 28px;
+    list-style: none;
+  }
+
+  .nav-links a {
+    color: var(--muted);
+    text-decoration: none;
+    font-size: 13px;
+    font-weight: 500;
+    transition: color 0.2s;
+  }
+
+  .nav-links a:hover { color: var(--text); }
+
+  /* ── Hero ── */
+  .hero {
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    text-align: center;
+    padding: 80px 24px 60px;
+    position: relative;
+    overflow: hidden;
+  }
+
+  .hero-grid {
+    position: absolute;
+    inset: 0;
+    background-image:
+      linear-gradient(rgba(59,130,246,0.04) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(59,130,246,0.04) 1px, transparent 1px);
+    background-size: 48px 48px;
+    mask-image: radial-gradient(ellipse 80% 60% at 50% 50%, black 30%, transparent 100%);
+  }
+
+  .hero-glow {
+    position: absolute;
+    width: 600px; height: 600px;
+    border-radius: 50%;
+    background: radial-gradient(circle, rgba(59,130,246,0.08) 0%, transparent 70%);
+    top: 50%; left: 50%;
+    transform: translate(-50%, -50%);
+    pointer-events: none;
+  }
+
+  .hero-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 5px 14px;
+    border: 1px solid rgba(59,130,246,0.3);
+    border-radius: 100px;
+    font-family: var(--mono);
+    font-size: 12px;
+    color: var(--blue);
+    background: rgba(59,130,246,0.06);
+    margin-bottom: 28px;
+    animation: fadeDown 0.6s ease both;
+  }
+
+  .hero h1 {
+    font-size: clamp(36px, 6vw, 68px);
+    font-weight: 600;
+    line-height: 1.1;
+    letter-spacing: -0.03em;
+    margin-bottom: 20px;
+    animation: fadeDown 0.7s 0.1s ease both;
+  }
+
+  .hero h1 span {
+    background: linear-gradient(135deg, #3b82f6, #8b5cf6);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+  }
+
+  .hero-sub {
+    font-size: 17px;
+    color: var(--muted);
+    max-width: 560px;
+    margin-bottom: 40px;
+    animation: fadeDown 0.7s 0.2s ease both;
+  }
+
+  .hero-actions {
+    display: flex;
+    gap: 12px;
+    flex-wrap: wrap;
+    justify-content: center;
+    animation: fadeDown 0.7s 0.3s ease both;
+  }
+
+  .btn {
+    padding: 11px 24px;
+    border-radius: 10px;
+    font-size: 14px;
+    font-weight: 500;
+    cursor: pointer;
+    text-decoration: none;
+    transition: all 0.2s;
+    border: none;
+  }
+
+  .btn-primary {
+    background: var(--blue);
+    color: #fff;
+  }
+  .btn-primary:hover { background: #2563eb; transform: translateY(-1px); }
+
+  .btn-ghost {
+    background: transparent;
+    color: var(--muted);
+    border: 1px solid var(--border2);
+  }
+  .btn-ghost:hover { color: var(--text); border-color: var(--blue); }
+
+  /* ── Flow diagram ── */
+  .flow-section {
+    padding: 80px 24px;
+    max-width: 900px;
+    margin: 0 auto;
+  }
+
+  .section-label {
+    font-family: var(--mono);
+    font-size: 11px;
+    color: var(--blue);
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    margin-bottom: 10px;
+  }
+
+  .section-title {
+    font-size: 28px;
+    font-weight: 600;
+    margin-bottom: 10px;
+    letter-spacing: -0.02em;
+  }
+
+  .section-sub {
+    color: var(--muted);
+    max-width: 520px;
+    margin-bottom: 48px;
+    font-size: 15px;
+  }
+
+  .flow {
+    display: flex;
+    flex-direction: column;
+    gap: 0;
+  }
+
+  .flow-step {
+    display: grid;
+    grid-template-columns: 48px 1fr;
+    gap: 0 20px;
+    opacity: 0;
+    transform: translateY(20px);
+    transition: opacity 0.5s ease, transform 0.5s ease;
+  }
+
+  .flow-step.visible {
+    opacity: 1;
+    transform: none;
+  }
+
+  .flow-left {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+  }
+
+  .flow-num {
+    width: 36px; height: 36px;
+    border-radius: 50%;
+    border: 1px solid var(--border2);
+    background: var(--bg2);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-family: var(--mono);
+    font-size: 13px;
+    font-weight: 500;
+    color: var(--blue);
+    flex-shrink: 0;
+    position: relative;
+    z-index: 1;
+  }
+
+  .flow-line {
+    flex: 1;
+    width: 1px;
+    background: linear-gradient(to bottom, var(--border2), transparent);
+    margin: 4px 0;
+    min-height: 32px;
+  }
+
+  .flow-content {
+    padding-bottom: 36px;
+  }
+
+  .flow-tag {
+    display: inline-block;
+    font-family: var(--mono);
+    font-size: 11px;
+    padding: 2px 8px;
+    border-radius: 4px;
+    margin-bottom: 8px;
+    font-weight: 500;
+  }
+
+  .tag-get  { background: rgba(16,185,129,0.12); color: var(--green); }
+  .tag-post { background: rgba(59,130,246,0.12); color: var(--blue); }
+  .tag-note { background: rgba(245,158,11,0.12); color: var(--amber); }
+  .tag-warn { background: rgba(239,68,68,0.12);  color: var(--red); }
+
+  .flow-title {
+    font-size: 16px;
+    font-weight: 500;
+    margin-bottom: 6px;
+  }
+
+  .flow-desc {
+    color: var(--muted);
+    font-size: 14px;
+    line-height: 1.6;
+  }
+
+  /* ── Code blocks ── */
+  .section {
+    padding: 80px 24px;
+    max-width: 900px;
+    margin: 0 auto;
+  }
+
+  .section + .section {
+    padding-top: 0;
+  }
+
+  .code-block {
+    background: var(--bg2);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    overflow: hidden;
+    margin: 20px 0;
+    opacity: 0;
+    transform: translateY(16px);
+    transition: opacity 0.5s ease, transform 0.5s ease;
+  }
+
+  .code-block.visible {
+    opacity: 1;
+    transform: none;
+  }
+
+  .code-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 10px 16px;
+    border-bottom: 1px solid var(--border);
+    background: var(--bg3);
+  }
+
+  .code-dots {
+    display: flex;
+    gap: 6px;
+  }
+
+  .code-dot {
+    width: 10px; height: 10px;
+    border-radius: 50%;
+  }
+
+  .dot-r { background: #ef4444; }
+  .dot-y { background: #f59e0b; }
+  .dot-g { background: #10b981; }
+
+  .code-filename {
+    font-family: var(--mono);
+    font-size: 12px;
+    color: var(--muted);
+  }
+
+  .copy-btn {
+    font-family: var(--mono);
+    font-size: 11px;
+    color: var(--muted);
+    background: none;
+    border: 1px solid var(--border);
+    border-radius: 5px;
+    padding: 3px 10px;
+    cursor: pointer;
+    transition: all 0.2s;
+  }
+
+  .copy-btn:hover { color: var(--text); border-color: var(--border2); }
+  .copy-btn.copied { color: var(--green); border-color: var(--green); }
+
+  pre {
+    padding: 20px;
+    overflow-x: auto;
+    font-family: var(--mono);
+    font-size: 13px;
+    line-height: 1.75;
+  }
+
+  .kw  { color: #c084fc; }
+  .str { color: #34d399; }
+  .cm  { color: #4a5568; font-style: italic; }
+  .fn  { color: #60a5fa; }
+  .num { color: #f59e0b; }
+  .prop{ color: #e2e8f0; }
+  .val { color: #fb923c; }
+
+  /* ── Endpoint table ── */
+  .endpoint-grid {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    margin-top: 24px;
+  }
+
+  .endpoint-row {
+    display: grid;
+    grid-template-columns: 60px 260px 1fr;
+    gap: 16px;
+    align-items: start;
+    padding: 14px 16px;
+    background: var(--bg2);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    opacity: 0;
+    transform: translateX(-12px);
+    transition: opacity 0.4s ease, transform 0.4s ease, border-color 0.2s;
+  }
+
+  .endpoint-row:hover { border-color: var(--border2); }
+  .endpoint-row.visible { opacity: 1; transform: none; }
+
+  .method-badge {
+    font-family: var(--mono);
+    font-size: 11px;
+    font-weight: 500;
+    padding: 3px 8px;
+    border-radius: 5px;
+    text-align: center;
+  }
+
+  .m-get  { background: rgba(16,185,129,0.15); color: #34d399; }
+  .m-post { background: rgba(59,130,246,0.15); color: #60a5fa; }
+
+  .ep-path {
+    font-family: var(--mono);
+    font-size: 13px;
+    color: var(--text);
+    word-break: break-all;
+  }
+
+  .ep-desc { font-size: 13px; color: var(--muted); }
+
+  /* ── Do / Don't ── */
+  .rules-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 20px;
+    margin-top: 24px;
+  }
+
+  @media (max-width: 640px) {
+    .rules-grid { grid-template-columns: 1fr; }
+    .endpoint-row { grid-template-columns: 56px 1fr; }
+    .ep-desc { display: none; }
+    nav { padding: 0 20px; }
+    .nav-links { display: none; }
+  }
+
+  .rules-card {
+    background: var(--bg2);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 20px;
+    opacity: 0;
+    transform: translateY(16px);
+    transition: opacity 0.5s ease, transform 0.5s ease;
+  }
+
+  .rules-card.visible { opacity: 1; transform: none; }
+
+  .rules-card.do   { border-top: 2px solid var(--green); }
+  .rules-card.dont { border-top: 2px solid var(--red); }
+
+  .rules-heading {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-weight: 500;
+    font-size: 14px;
+    margin-bottom: 16px;
+  }
+
+  .rules-heading .icon {
+    width: 22px; height: 22px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 12px;
+  }
+
+  .do   .icon { background: rgba(16,185,129,0.15); color: var(--green); }
+  .dont .icon { background: rgba(239,68,68,0.15);  color: var(--red); }
+
+  .rules-list {
+    list-style: none;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+  }
+
+  .rules-list li {
+    font-size: 13px;
+    color: var(--muted);
+    padding-left: 16px;
+    position: relative;
+    line-height: 1.5;
+  }
+
+  .rules-list li::before {
+    content: '';
+    position: absolute;
+    left: 0; top: 8px;
+    width: 5px; height: 5px;
+    border-radius: 50%;
+  }
+
+  .do   .rules-list li::before { background: var(--green); }
+  .dont .rules-list li::before { background: var(--red); }
+
+  /* ── Token table ── */
+  .token-table {
+    width: 100%;
+    border-collapse: collapse;
+    margin-top: 20px;
+    font-size: 13px;
+    opacity: 0;
+    transition: opacity 0.5s ease;
+  }
+
+  .token-table.visible { opacity: 1; }
+
+  .token-table th {
+    text-align: left;
+    padding: 10px 14px;
+    font-family: var(--mono);
+    font-size: 11px;
+    color: var(--muted);
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .token-table td {
+    padding: 12px 14px;
+    border-bottom: 1px solid var(--border);
+    vertical-align: top;
+  }
+
+  .token-table tr:last-child td { border-bottom: none; }
+  .token-table tr:hover td { background: rgba(255,255,255,0.02); }
+
+  .token-name {
+    font-family: var(--mono);
+    font-size: 12px;
+    color: var(--purple);
+  }
+
+  /* ── Footer ── */
+  footer {
+    border-top: 1px solid var(--border);
+    padding: 40px 24px;
+    text-align: center;
+    color: var(--muted);
+    font-size: 13px;
+    font-family: var(--mono);
+  }
+
+  footer span { color: var(--blue); }
+
+  /* ── Divider ── */
+  .divider {
+    height: 1px;
+    background: linear-gradient(to right, transparent, var(--border), transparent);
+    margin: 0 24px;
+  }
+
+  /* ── Animations ── */
+  @keyframes fadeDown {
+    from { opacity: 0; transform: translateY(-16px); }
+    to   { opacity: 1; transform: none; }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    *, .flow-step, .code-block, .endpoint-row, .rules-card, .token-table {
+      animation: none !important;
+      transition: none !important;
+      opacity: 1 !important;
+      transform: none !important;
+    }
+  }
+</style>
+</head>
+<body>
+
+<!-- Nav -->
+<nav>
+  <a class="nav-brand" href="#">
+    <div class="nav-dot"></div>
+    oidc-provider
+  </a>
+  <ul class="nav-links">
+    <li><a href="#flow">Flow</a></li>
+    <li><a href="#endpoints">Endpoints</a></li>
+    <li><a href="#integration">Integration</a></li>
+    <li><a href="#tokens">Tokens</a></li>
+    <li><a href="#rules">Rules</a></li>
+  </ul>
+</nav>
+
+<!-- Hero -->
+<section class="hero">
+  <div class="hero-grid"></div>
+  <div class="hero-glow"></div>
+  <div class="hero-badge">OAuth 2.0 + OpenID Connect</div>
+  <h1>Your <span>Single Sign-On</span><br>Provider</h1>
+  <p class="hero-sub">
+    One auth server. Any number of client apps. Users log in once and stay logged in everywhere — here's exactly how to wire it up.
+  </p>
+  <div class="hero-actions">
+    <a href="#flow" class="btn btn-primary">See the flow</a>
+    <a href="#integration" class="btn btn-ghost">Jump to code</a>
+  </div>
+</section>
+
+<div class="divider"></div>
+
+<!-- Authorization Code Flow -->
+<section class="flow-section" id="flow">
+  <div class="section-label">Authorization Code Flow</div>
+  <h2 class="section-title">How SSO works, step by step</h2>
+  <p class="section-sub">Your client app never handles passwords. It redirects here, we authenticate the user, and send back a short-lived code.</p>
+
+  <div class="flow">
+
+    <div class="flow-step">
+      <div class="flow-left">
+        <div class="flow-num">1</div>
+        <div class="flow-line"></div>
+      </div>
+      <div class="flow-content">
+        <span class="flow-tag tag-get">Client App</span>
+        <div class="flow-title">Register your app first</div>
+        <div class="flow-desc">Go to  <code style="font-family:var(--mono);color:var(--blue);font-size:12px"><a href="/o/register-client" class="reg">Register</a></code> to get your <code style="font-family:var(--mono);color:var(--purple);font-size:12px">client_id</code> and <code style="font-family:var(--mono);color:var(--purple);font-size:12px">client_secret</code>. Store these securely — client_secret is shown only once.</div>
+      </div>
+    </div>
+    <div class="flow-step">
+      <div class="flow-left">
+        <div class="flow-num">2</div>
+        <div class="flow-line"></div>
+      </div>
+      <div class="flow-content">
+        <span class="flow-tag tag-get">GET</span>
+        <div class="flow-title">Redirect user to /o/authorize</div>
+        <div class="flow-desc">Send the user here with <code style="font-family:var(--mono);color:var(--amber);font-size:12px">client_id</code>, <code style="font-family:var(--mono);color:var(--amber);font-size:12px">redirect_uri</code>, <code style="font-family:var(--mono);color:var(--amber);font-size:12px">response_type=code</code>, and a random <code style="font-family:var(--mono);color:var(--amber);font-size:12px">state</code> you generate. If they already have a session, they skip login entirely — that's the SSO magic.</div>
+      </div>
+    </div>
+
+    <div class="flow-step">
+      <div class="flow-left">
+        <div class="flow-num">3</div>
+        <div class="flow-line"></div>
+      </div>
+      <div class="flow-content">
+        <span class="flow-tag tag-note">Auth Server</span>
+        <div class="flow-title">User logs in and approves</div>
+        <div class="flow-desc">We show the login + consent page. If the user already has a session from another client, they only see the consent screen (no password again). On approval, we redirect back to your <code style="font-family:var(--mono);color:var(--blue);font-size:12px">redirect_uri?code=...&state=...</code>.</div>
+      </div>
+    </div>
+
+    <div class="flow-step">
+      <div class="flow-left">
+        <div class="flow-num">4</div>
+        <div class="flow-line"></div>
+      </div>
+      <div class="flow-content">
+        <span class="flow-tag tag-post">POST</span>
+        <div class="flow-title">Exchange code for tokens at /o/token</div>
+        <div class="flow-desc">Your server (not browser) sends the code + client_secret to <code style="font-family:var(--mono);color:var(--blue);font-size:12px">/o/token</code>. You get back an <code style="font-family:var(--mono);color:var(--green);font-size:12px">access_token (exp 10 min)</code>, <code style="font-family:var(--mono);color:var(--green);font-size:12px">id_token</code>, and <code style="font-family:var(--mono);color:var(--green);font-size:12px">refresh_token (exp 7 days)</code>. The code expires in 5 minutes and is one-time use.</div>
+      </div>
+    </div>
+
+    <div class="flow-step">
+      <div class="flow-left">
+        <div class="flow-num">5</div>
+        <div class="flow-line"></div>
+      </div>
+      <div class="flow-content">
+        <span class="flow-tag tag-get">GET</span>
+        <div class="flow-title">Fetch user profile from /o/userinfo</div>
+        <div class="flow-desc">Use the access_token as a Bearer token. Returns the user's name, email, and profile fields. Verify the JWT signature using <code style="font-family:var(--mono);color:var(--blue);font-size:12px">/.well-known/jwks.json</code> — never trust a token you haven't verified.</div>
+      </div>
+    </div>
+
+    <div class="flow-step">
+      <div class="flow-left">
+        <div class="flow-num">6</div>
+      </div>
+      <div class="flow-content">
+        <span class="flow-tag tag-post">POST</span>
+        <div class="flow-title">Refresh access token when it expires</div>
+        <div class="flow-desc">Access tokens expire in 7 days. Send <code style="font-family:var(--mono);color:var(--amber);font-size:12px">grant_type=refresh_token</code> to <code style="font-family:var(--mono);color:var(--blue);font-size:12px">/o/token</code> with your client_id and client_secret. You get a new access_token without bothering the user.</div>
+      </div>
+    </div>
+
+  </div>
+</section>
+
+<div class="divider"></div>
+
+<!-- Endpoints -->
+<section class="section" id="endpoints">
+  <div class="section-label">Reference</div>
+  <h2 class="section-title">All endpoints</h2>
+  <p class="section-sub">Base URL: <code style="font-family:var(--mono);color:var(--blue);font-size:13px">http://localhost:5000</code></p>
+
+  <div class="endpoint-grid">
+
+    <div class="endpoint-row">
+      <span class="method-badge m-get">GET</span>
+      <div class="ep-path">/.well-known/openid-configuration</div>
+      <div class="ep-desc">Discovery doc — auto-configure any OIDC client library from this URL</div>
+    </div>
+
+    <div class="endpoint-row">
+      <span class="method-badge m-get">GET</span>
+      <div class="ep-path">/o/authorize</div>
+      <div class="ep-desc">Start the login flow. Pass client_id, redirect_uri, response_type=code, state</div>
+    </div>
+
+    <div class="endpoint-row">
+      <span class="method-badge m-post">POST</span>
+      <div class="ep-path">/o/token</div>
+      <div class="ep-desc">Exchange auth code or refresh token for access/id tokens. Requires client_id and client_secret.</div>
+    </div>
+
+    <div class="endpoint-row">
+      <span class="method-badge m-get">GET</span>
+      <div class="ep-path">/o/userinfo</div>
+      <div class="ep-desc">Get logged-in user's profile. Pass access_token as Bearer header.</div>
+    </div>
+
+    <div class="endpoint-row">
+      <span class="method-badge m-get">GET</span>
+      <div class="ep-path">/.well-known/jwks.json</div>
+      <div class="ep-desc">Public RSA keys to verify JWT signatures. Use your JWT library's JWKS support.</div>
+    </div>
+
+    <div class="endpoint-row">
+      <span class="method-badge m-post">POST</span>
+      <div class="ep-path">/o/register-client</div>
+      <div class="ep-desc">Register a new client app. Returns client_id and client_secret (shown once).</div>
+    </div>
+
+    <div class="endpoint-row">
+      <span class="method-badge m-post">POST</span>
+      <div class="ep-path">/logout</div>
+      <div class="ep-desc">Destroy the user's SSO session. Clears the session cookie on the auth server.</div>
+    </div>
+
+  </div>
+</section>
+
+<div class="divider"></div>
+
+<!-- Integration Code -->
+<section class="section" id="integration">
+  <div class="section-label">Integration</div>
+  <h2 class="section-title">Wire it up in your client app</h2>
+  <p class="section-sub">Your setup: static HTML frontend + separate API server. Four files to wire the full flow.</p>
+
+  <!-- Step 1 -->
+  <div class="code-block">
+    <div class="code-header">
+      <div class="code-dots">
+        <div class="code-dot dot-r"></div>
+        <div class="code-dot dot-y"></div>
+        <div class="code-dot dot-g"></div>
+      </div>
+      <span class="code-filename">home.html — login &amp; signup buttons</span>
+      <button class="copy-btn" onclick="copyCode(this)">copy</button>
+    </div>
+    <pre><span class="cm">// Generate state and redirect to OIDC provider</span>
+<span class="kw">const</span> <span class="prop">loginBtn</span> = document.<span class="fn">getElementById</span>(<span class="str">"loginBtn"</span>);
+ 
+loginBtn.<span class="fn">addEventListener</span>(<span class="str">"click"</span>, () => {
+  <span class="kw">const</span> <span class="prop">state</span> = crypto.<span class="fn">randomUUID</span>(); <span class="cm">// random per attempt</span>
+  sessionStorage.<span class="fn">setItem</span>(<span class="str">"oauth_state"</span>, state); <span class="cm">// save to verify later</span>
+ 
+  <span class="kw">const</span> <span class="prop">params</span> = <span class="kw">new</span> <span class="fn">URLSearchParams</span>({
+    client_id:     <span class="str">"YOUR_CLIENT_ID"</span>,
+    redirect_uri:  <span class="str">"http://localhost:3000/callback.html"</span>,
+    response_type: <span class="str">"code"</span>,
+    scope:         <span class="str">"openid profile email"</span>,
+    state
+  });
+ 
+  window.location.href =
+    <span class="str">`http://localhost:5000/o/authorize?<span class="val">${params}</span>`</span>;
+});
+ 
+<span class="cm">// Signup — same flow, different endpoint</span>
+<span class="kw">const</span> <span class="prop">signupBtn</span> = document.<span class="fn">getElementById</span>(<span class="str">"signupBtn"</span>);
+ 
+signupBtn.<span class="fn">addEventListener</span>(<span class="str">"click"</span>, () => {
+  <span class="kw">const</span> <span class="prop">state</span> = crypto.<span class="fn">randomUUID</span>();
+  sessionStorage.<span class="fn">setItem</span>(<span class="str">"oauth_state"</span>, state);
+ 
+  <span class="kw">const</span> <span class="prop">params</span> = <span class="kw">new</span> <span class="fn">URLSearchParams</span>({
+    client_id:     <span class="str">"YOUR_CLIENT_ID"</span>,
+    redirect_uri:  <span class="str">"http://localhost:3000/callback.html"</span>,
+    response_type: <span class="str">"code"</span>,
+    scope:         <span class="str">"openid profile email"</span>,
+    state
+  });
+ 
+  window.location.href =
+    <span class="str">`http://localhost:5000/signup?<span class="val">${params}</span>`</span>;
+});</pre>
+  </div>
+ 
+  <!-- Step 2 -->
+  <div class="code-block">
+    <div class="code-header">
+      <div class="code-dots">
+        <div class="code-dot dot-r"></div>
+        <div class="code-dot dot-y"></div>
+        <div class="code-dot dot-g"></div>
+      </div>
+      <span class="code-filename">callback.html — exchange code for tokens</span>
+      <button class="copy-btn" onclick="copyCode(this)">copy</button>
+    </div>
+    <pre><span class="cm">// Runs when OIDC provider redirects back with ?code=...&state=...</span>
+<span class="kw">async function</span> <span class="fn">exchangeCode</span>() {
+  <span class="kw">const</span> <span class="prop">params</span>  = <span class="kw">new</span> <span class="fn">URLSearchParams</span>(window.location.search);
+  <span class="kw">const</span> <span class="prop">code</span>    = params.<span class="fn">get</span>(<span class="str">"code"</span>);
+  <span class="kw">const</span> <span class="prop">state</span>   = params.<span class="fn">get</span>(<span class="str">"state"</span>);
+  <span class="kw">const</span> <span class="prop">saved</span>   = sessionStorage.<span class="fn">getItem</span>(<span class="str">"oauth_state"</span>);
+ 
+  <span class="cm">// ⚠️ state check skipped in your current setup — add this later</span>
+  <span class="cm">// if (state !== saved) throw new Error("State mismatch");</span>
+  sessionStorage.<span class="fn">removeItem</span>(<span class="str">"oauth_state"</span>);
+ 
+  <span class="kw">const</span> <span class="prop">response</span> = <span class="kw">await</span> <span class="fn">fetch</span>(<span class="str">"http://localhost:5000/o/token"</span>, {
+    method: <span class="str">"POST"</span>,
+    headers: { <span class="str">"Content-Type"</span>: <span class="str">"application/json"</span> },
+    body: <span class="fn">JSON</span>.<span class="fn">stringify</span>({
+      code,
+      client_id:     <span class="str">"YOUR_CLIENT_ID"</span>,
+      client_secret: <span class="str">"YOUR_CLIENT_SECRET"</span>, <span class="cm">// ⚠️ exposed — see security note</span>
+      redirect_uri:  <span class="str">"http://localhost:3000/callback.html"</span>,
+      grant_type:    <span class="str">"authorization_code"</span>
+    })
+  });
+ 
+  <span class="kw">const</span> <span class="prop">data</span> = <span class="kw">await</span> response.<span class="fn">json</span>();
+ 
+  <span class="cm">// access_token + id_token → localStorage (readable by JS)</span>
+  <span class="kw">if</span> (data.access_token) localStorage.<span class="fn">setItem</span>(<span class="str">"access_token"</span>, data.access_token);
+  <span class="kw">if</span> (data.id_token)     localStorage.<span class="fn">setItem</span>(<span class="str">"id_token"</span>,     data.id_token);
+  <span class="cm">// refresh_token → HttpOnly cookie (set by server, JS cannot read it)</span>
+ 
+  window.location.href = <span class="str">"/"</span>; <span class="cm">// redirect to home/dashboard</span>
+}
+ 
+<span class="fn">exchangeCode</span>();</pre>
+  </div>
+ 
+  <!-- Step 3 -->
+  <div class="code-block">
+    <div class="code-header">
+      <div class="code-dots">
+        <div class="code-dot dot-r"></div>
+        <div class="code-dot dot-y"></div>
+        <div class="code-dot dot-g"></div>
+      </div>
+      <span class="code-filename">any page — call a protected API route</span>
+      <button class="copy-btn" onclick="copyCode(this)">copy</button>
+    </div>
+    <pre><span class="cm">// Read token from localStorage and attach as Bearer header</span>
+<span class="kw">const</span> <span class="prop">token</span> = localStorage.<span class="fn">getItem</span>(<span class="str">"access_token"</span>);
+ 
+<span class="kw">if</span> (!token) {
+  window.location.href = <span class="str">"/"</span>; <span class="cm">// not logged in — redirect home</span>
+}
+ 
+<span class="kw">const</span> <span class="prop">res</span> = <span class="kw">await</span> <span class="fn">fetch</span>(<span class="str">"http://localhost:4000/api/profile"</span>, {
+  headers: {
+    <span class="str">"Authorization"</span>: <span class="str">`Bearer <span class="val">${token}</span>`</span> <span class="cm">// ✅ attach token here</span>
+  }
+});
+ 
+<span class="kw">if</span> (res.status === <span class="num">401</span>) {
+  <span class="cm">// token expired — try refresh</span>
+  <span class="kw">await</span> <span class="fn">refreshToken</span>();
+  <span class="cm">// then retry the request</span>
+}
+ 
+<span class="kw">const</span> <span class="prop">data</span> = <span class="kw">await</span> res.<span class="fn">json</span>();</pre>
+  </div>
+ 
+  <!-- Step 4 -->
+  <div class="code-block">
+    <div class="code-header">
+      <div class="code-dots">
+        <div class="code-dot dot-r"></div>
+        <div class="code-dot dot-y"></div>
+        <div class="code-dot dot-g"></div>
+      </div>
+      <span class="code-filename">middleware/authenticate.ts — protect API routes</span>
+      <button class="copy-btn" onclick="copyCode(this)">copy</button>
+    </div>
+    <pre><span class="kw">import</span> * <span class="kw">as</span> jose <span class="kw">from</span> <span class="str">"jose"</span>;
+ 
+<span class="cm">// Fetches public keys from OIDC provider — cached automatically by jose</span>
+<span class="kw">const</span> <span class="prop">JWKS</span> = jose.<span class="fn">createRemoteJWKSet</span>(
+  <span class="kw">new</span> <span class="fn">URL</span>(<span class="str">"http://localhost:5000/.well-known/jwks.json"</span>)
+);
+ 
+<span class="kw">export const</span> <span class="prop">authenticate</span> = <span class="kw">async</span> (req, res, next) => {
+  <span class="kw">const</span> <span class="prop">authHeader</span> = req.headers.authorization;
+ 
+  <span class="kw">if</span> (!authHeader || !authHeader.<span class="fn">startsWith</span>(<span class="str">"Bearer "</span>)) {
+    <span class="kw">return</span> res.<span class="fn">status</span>(<span class="num">401</span>).<span class="fn">json</span>({ error: <span class="str">"Unauthorized"</span> });
+  }
+ 
+  <span class="kw">const</span> <span class="prop">token</span> = authHeader.<span class="fn">split</span>(<span class="str">" "</span>)[<span class="num">1</span>];
+ 
+  <span class="kw">try</span> {
+    <span class="cm">// Verifies signature, expiry, issuer automatically</span>
+    <span class="kw">const</span> { <span class="prop">payload</span> } = <span class="kw">await</span> jose.<span class="fn">jwtVerify</span>(token, JWKS, {
+      algorithms: [<span class="str">"RS256"</span>],
+      issuer:     <span class="str">"http://localhost:5000"</span>
+    });
+ 
+    req.user = payload; <span class="cm">// { sub, email, name, ... } available in route</span>
+    <span class="fn">next</span>();
+ 
+  } <span class="kw">catch</span> (err) {
+    <span class="kw">return</span> res.<span class="fn">status</span>(<span class="num">401</span>).<span class="fn">json</span>({ error: <span class="str">"Invalid or expired token"</span> });
+  }
+};
+ 
+<span class="cm">// Usage on any protected route:</span>
+<span class="cm">// app.get("/api/profile", authenticate, (req, res) => {</span>
+<span class="cm">//   res.json({ user: req.user });</span>
+<span class="cm">// });</span></pre>
+  </div>
+ 
+  <!-- Step 5 refresh -->
+  <div class="code-block">
+    <div class="code-header">
+      <div class="code-dots">
+        <div class="code-dot dot-r"></div>
+        <div class="code-dot dot-y"></div>
+        <div class="code-dot dot-g"></div>
+      </div>
+      <span class="code-filename">refresh.js — get new access token when expired</span>
+      <button class="copy-btn" onclick="copyCode(this)">copy</button>
+    </div>
+    <pre><span class="cm">// refresh_token is in HttpOnly cookie — browser sends it automatically</span>
+<span class="cm">// no need to read it from localStorage, credentials:"include" does the job</span>
+<span class="kw">async function</span> <span class="fn">refreshToken</span>() {
+ 
+  <span class="kw">const</span> <span class="prop">res</span> = <span class="kw">await</span> <span class="fn">fetch</span>(<span class="str">"http://localhost:5000/o/token"</span>, {
+    method:      <span class="str">"POST"</span>,
+    credentials: <span class="str">"include"</span>, <span class="cm">// ✅ sends HttpOnly cookie automatically</span>
+    headers: { <span class="str">"Content-Type"</span>: <span class="str">"application/json"</span> },
+    body: <span class="fn">JSON</span>.<span class="fn">stringify</span>({
+      grant_type:    <span class="str">"refresh_token"</span>,
+      client_id:     <span class="str">"YOUR_CLIENT_ID"</span>,
+      client_secret: <span class="str">"YOUR_CLIENT_SECRET"</span>
+    })
+  });
+ 
+  <span class="kw">const</span> <span class="prop">data</span> = <span class="kw">await</span> res.<span class="fn">json</span>();
+ 
+  <span class="kw">if</span> (data.access_token) {
+    localStorage.<span class="fn">setItem</span>(<span class="str">"access_token"</span>, data.access_token); <span class="cm">// ✅ new access token</span>
+  } <span class="kw">else</span> {
+    <span class="cm">// refresh token expired — force login</span>
+    localStorage.<span class="fn">clear</span>();
+    window.location.href = <span class="str">"/"</span>;
+  }
+}</pre>
+  </div>
+ 
+  <!-- Security note box -->
+  <div style="margin-top:20px;padding:16px 20px;background:rgba(245,158,11,0.06);border:1px solid rgba(245,158,11,0.25);border-radius:12px;">
+    <div style="font-size:13px;font-weight:500;color:#f59e0b;margin-bottom:8px;">⚠️ Security note about this setup</div>
+    <div style="font-size:13px;color:var(--muted);line-height:1.65;">
+      Access tokens are stored in <code style="font-family:var(--mono);color:#f59e0b;font-size:12px">localStorage</code> for demonstration purposes. Refresh tokens are stored in <code style="font-family:var(--mono);color:#10b981;font-size:12px">HttpOnly cookies</code> and are never accessible from JavaScript, reducing the risk of token theft through XSS attacks. In production, also move the token exchange to a backend server so <code style="font-family:var(--mono);color:#f59e0b;font-size:12px">client_secret</code> is never exposed in browser source.
+    </div>
+  </div>
+ 
+</section>
+ 
+<div class="divider"></div>
+ 
+<!-- SSO Section -->
+<section class="section" id="sso">
+  <div class="section-label">Single Sign-On</div>
+  <h2 class="section-title">How SSO works across clients</h2>
+  <p class="section-sub">The Identity Provider maintains a server-side session. Once a user logs in to one client, other clients skip the login screen entirely.</p>
+ 
+  <div style="display:flex;flex-direction:column;gap:12px;margin-top:8px;">
+ 
+    <div style="padding:18px 20px;background:var(--bg2);border:1px solid var(--border);border-radius:12px;font-size:14px;color:var(--muted);line-height:1.7;">
+      <span style="color:var(--text);font-weight:500;">Step 1 — First login (Client A)</span><br>
+      User visits Client A → redirected to <code style="font-family:var(--mono);color:var(--blue);font-size:12px">/o/authorize</code> → enters credentials → session cookie set on auth server → consent shown → code issued → tokens returned. User is now logged in.
+    </div>
+ 
+    <div style="padding:18px 20px;background:var(--bg2);border:1px solid var(--border);border-radius:12px;font-size:14px;color:var(--muted);line-height:1.7;">
+      <span style="color:var(--text);font-weight:500;">Step 2 — SSO login (Client B, same browser)</span><br>
+      User visits Client B → redirected to <code style="font-family:var(--mono);color:var(--blue);font-size:12px">/o/authorize</code> → auth server finds existing session cookie → <strong style="color:var(--green)">login page skipped entirely</strong> → consent shown for Client B → code issued → tokens returned. No password entered.
+    </div>
+ 
+    <div style="padding:18px 20px;background:var(--bg2);border:1px solid var(--border);border-left:2px solid var(--green);border-radius:12px;font-size:14px;color:var(--muted);line-height:1.7;">
+      <span style="color:var(--green);font-weight:500;">✓ Already consented (Client B, returning visit)</span><br>
+      Session exists + binding exists → auth server skips both login and consent → code issued instantly → seamless SSO with zero user interaction.
+    </div>
+ 
+    <div style="padding:18px 20px;background:var(--bg2);border:1px solid var(--border);border-left:2px solid var(--red);border-radius:12px;font-size:14px;color:var(--muted);line-height:1.7;">
+      <span style="color:var(--red);font-weight:500;">✕ Different browser or incognito</span><br>
+      No session cookie present → full login required again. SSO is browser-scoped, not account-scoped.
+    </div>
+ 
+  </div>
+</section>
+
+<div class="divider"></div>
+
+<!-- Token claims -->
+<section class="section" id="tokens">
+  <div class="section-label">Tokens</div>
+  <h2 class="section-title">What's inside the tokens</h2>
+  <p class="section-sub">Both access_token and id_token are RS256-signed JWTs. Verify with the public key at <code style="font-family:var(--mono);color:var(--blue);font-size:13px">/.well-known/jwks.json</code>.</p>
+
+  <table class="token-table">
+    <thead>
+      <tr>
+        <th>Claim</th>
+        <th>Type</th>
+        <th>Description</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td><span class="token-name">sub</span></td>
+        <td style="font-family:var(--mono);font-size:12px;color:var(--muted)">string</td>
+        <td style="color:var(--muted);font-size:13px">User's unique ID — use this as the stable identifier in your DB</td>
+      </tr>
+      <tr>
+        <td><span class="token-name">email</span></td>
+        <td style="font-family:var(--mono);font-size:12px;color:var(--muted)">string</td>
+        <td style="color:var(--muted);font-size:13px">User's email address</td>
+      </tr>
+      <tr>
+        <td><span class="token-name">email_verified</span></td>
+        <td style="font-family:var(--mono);font-size:12px;color:var(--muted)">string</td>
+        <td style="color:var(--muted);font-size:13px">"true" or "false" — check before trusting the email</td>
+      </tr>
+      <tr>
+        <td><span class="token-name">given_name</span></td>
+        <td style="font-family:var(--mono);font-size:12px;color:var(--muted)">string</td>
+        <td style="color:var(--muted);font-size:13px">First name</td>
+      </tr>
+      <tr>
+        <td><span class="token-name">family_name</span></td>
+        <td style="font-family:var(--mono);font-size:12px;color:var(--muted)">string</td>
+        <td style="color:var(--muted);font-size:13px">Last name</td>
+      </tr>
+      <tr>
+        <td><span class="token-name">name</span></td>
+        <td style="font-family:var(--mono);font-size:12px;color:var(--muted)">string</td>
+        <td style="color:var(--muted);font-size:13px">Full name (first + last joined)</td>
+      </tr>
+      <tr>
+        <td><span class="token-name">picture</span></td>
+        <td style="font-family:var(--mono);font-size:12px;color:var(--muted)">string?</td>
+        <td style="color:var(--muted);font-size:13px">Profile image URL if set, otherwise absent</td>
+      </tr>
+      <tr>
+        <td><span class="token-name">iss</span></td>
+        <td style="font-family:var(--mono);font-size:12px;color:var(--muted)">string</td>
+        <td style="color:var(--muted);font-size:13px">Issuer — must equal <code style="font-family:var(--mono);color:var(--blue);font-size:12px">http://localhost:5000</code></td>
+      </tr>
+      <tr>
+        <td><span class="token-name">aud</span></td>
+        <td style="font-family:var(--mono);font-size:12px;color:var(--muted)">string</td>
+        <td style="color:var(--muted);font-size:13px">Your client_id — always verify this matches yours</td>
+      </tr>
+      <tr>
+        <td><span class="token-name">exp</span></td>
+        <td style="font-family:var(--mono);font-size:12px;color:var(--muted)">number</td>
+        <td style="color:var(--muted);font-size:13px">Expiry — Unix timestamp, 1 hour from issue</td>
+      </tr>
+    </tbody>
+  </table>
+</section>
+
+<div class="divider"></div>
+
+<!-- Do's and Don'ts -->
+<section class="section" id="rules">
+  <div class="section-label">Security</div>
+  <h2 class="section-title">Do's and don'ts</h2>
+  <p class="section-sub">Common mistakes that will break your integration or open security holes.</p>
+
+  <div class="rules-grid">
+    <div class="rules-card do">
+      <div class="rules-heading">
+        <div class="icon">✓</div>
+        Do these
+      </div>
+      <ul class="rules-list">
+        <li>Generate a fresh random <code style="font-family:var(--mono);font-size:11px;color:var(--green)">state</code> with <code style="font-family:var(--mono);font-size:11px;color:var(--green)">crypto.randomUUID()</code> for every login attempt</li>
+        <li>Save <code style="font-family:var(--mono);font-size:11px;color:var(--green)">state</code> in <code style="font-family:var(--mono);font-size:11px;color:var(--green)">sessionStorage</code> before redirect — verify it matches on callback</li>
+        <li>Always attach <code style="font-family:var(--mono);font-size:11px;color:var(--green)">Authorization: Bearer &lt;token&gt;</code> header on every API request</li>
+        <li>Verify JWT using <code style="font-family:var(--mono);font-size:11px;color:var(--green)">jose.jwtVerify()</code> with JWKS on your API server middleware</li>
+        <li>Use <code style="font-family:var(--mono);font-size:11px;color:var(--green)">sub</code> (not email) as stable user identifier in your DB</li>
+        <li>Handle <code style="font-family:var(--mono);font-size:11px;color:var(--green)">401</code> responses by calling <code style="font-family:var(--mono);font-size:11px;color:var(--green)">refreshToken()</code> then retrying</li>
+        <li>Clear all localStorage tokens on logout</li>
+        <li>Ensure <code style="font-family:var(--mono);font-size:11px;color:var(--green)">redirect_uri</code> exactly matches what you registered</li>
+      </ul>
+    </div>
+
+    <div class="rules-card dont">
+      <div class="rules-heading">
+        <div class="icon">✕</div>
+        Never do these
+      </div>
+      <ul class="rules-list">
+        <li>Never skip state validation on callback — it prevents CSRF attacks</li>
+        <li>Never trust a JWT without verifying its signature via JWKS</li>
+        <li>Never reuse an auth code — one-time use, expires in 5 min</li>
+        <li>Never use email as a primary key — users can change it, use <code style="font-family:var(--mono);font-size:11px;color:var(--red)">sub</code></li>
+        <li>Never send requests to protected routes without the Bearer token</li>
+        <li>Never store sensitive user data from JWT in localStorage long-term</li>
+        <li>Never call <code style="font-family:var(--mono);font-size:11px;color:var(--red)">/o/token</code> without <code style="font-family:var(--mono);font-size:11px;color:var(--red)">client_secret</code> — request will be rejected</li>
+        <li>Never ignore <code style="font-family:var(--mono);font-size:11px;color:var(--red)">401</code> errors — always refresh or redirect to login</li>
+      </ul>
+    </div>
+  </div>
+</section>
+
+<div class="divider"></div>
+
+<!-- Footer -->
+<footer>
+  <p>Built with <span>OAuth 2.0</span> + <span>OpenID Connect</span> · RS256 signed JWTs · Session-based SSO</p>
+  <p style="margin-top:8px;font-size:11px;color:#374151">issuer: http://localhost:5000 · jwks: /.well-known/jwks.json · discovery: /.well-known/openid-configuration</p>
+</footer>
+
+<script>
+  // ── Intersection Observer for scroll reveals
+  const observer = new IntersectionObserver((entries) => {
+    entries.forEach((entry, i) => {
+      if (entry.isIntersecting) {
+        const el = entry.target;
+        const delay = el.dataset.delay || 0;
+        setTimeout(() => el.classList.add('visible'), delay);
+        observer.unobserve(el);
+      }
+    });
+  }, { threshold: 0.12 });
+
+  // Flow steps — staggered
+  document.querySelectorAll('.flow-step').forEach((el, i) => {
+    el.dataset.delay = i * 100;
+    observer.observe(el);
+  });
+
+  // Code blocks — staggered
+  document.querySelectorAll('.code-block').forEach((el, i) => {
+    el.dataset.delay = i * 80;
+    observer.observe(el);
+  });
+
+  // Endpoint rows — staggered
+  document.querySelectorAll('.endpoint-row').forEach((el, i) => {
+    el.dataset.delay = i * 60;
+    observer.observe(el);
+  });
+
+  // Rules cards
+  document.querySelectorAll('.rules-card').forEach((el, i) => {
+    el.dataset.delay = i * 100;
+    observer.observe(el);
+  });
+
+  // Token table
+  document.querySelectorAll('.token-table').forEach(el => observer.observe(el));
+
+  // ── Copy button
+  function copyCode(btn) {
+    const pre = btn.closest('.code-block').querySelector('pre');
+    const text = pre.innerText;
+    navigator.clipboard.writeText(text).then(() => {
+      btn.textContent = 'copied!';
+      btn.classList.add('copied');
+      setTimeout(() => {
+        btn.textContent = 'copy';
+        btn.classList.remove('copied');
+      }, 2000);
+    });
+  }
+
+  // ── Active nav highlight on scroll
+  const sections = document.querySelectorAll('section[id]');
+  const navLinks = document.querySelectorAll('.nav-links a');
+
+  window.addEventListener('scroll', () => {
+    let current = '';
+    sections.forEach(s => {
+      if (window.scrollY >= s.offsetTop - 100) current = s.id;
+    });
+    navLinks.forEach(a => {
+      a.style.color = a.getAttribute('href') === '#' + current
+        ? 'var(--text)'
+        : '';
+    });
+  }, { passive: true });
+</script>
+
+</body>
+</html>
