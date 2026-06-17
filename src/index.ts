@@ -71,10 +71,10 @@ const authorizationCodes = new Map<string, AuthCode>();
 // Home
 // ======================================================
 
+// ✅ redirect to home page
 app.get("/", (_: Request, res: Response) => {
-  res.send("OAuth2 + OIDC Provider Running");
+  res.redirect("/home");
 });
-
 // ======================================================
 // OpenID Configuration
 // ======================================================
@@ -934,7 +934,7 @@ app.post("/o/token", async (req: Request, res: Response) => {
       token_type: "Bearer",
       id_token: idToken,
       refresh_token: refreshToken,
-      expires_in: Number(process.env.ACCESS_TOKEN_TTL) 
+      expires_in: Number(process.env.ACCESS_TOKEN_TTL)
     });
   }
 
