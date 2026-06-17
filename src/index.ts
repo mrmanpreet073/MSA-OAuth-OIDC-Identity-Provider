@@ -444,7 +444,7 @@ app.post("/o/authorize", async (req: Request, res: Response) => {
 
 
 
-app.get("/o/consent", async (req, res) => {
+app.get("/o/consent", async (req:Request, res:Response) => {
 
   const consentId = req.query.consent_id as string;
 
@@ -707,7 +707,7 @@ button{
 </html>
 `);
 });
-app.post("/o/consent", async (req, res) => {
+app.post("/o/consent", async (req:Request, res:Response) => {
 
   const { consent_id, decision } = req.body;
 
@@ -1257,7 +1257,7 @@ app.post("/o/register-client", async (req: Request, res: Response) => {
 );
 
 
-app.post("/logout", async (req, res) => {
+app.post("/logout", async (req:Request, res:Response) => {
 
   const refreshToken =
     req.cookies.refresh_token;
