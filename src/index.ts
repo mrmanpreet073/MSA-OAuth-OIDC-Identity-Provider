@@ -174,7 +174,7 @@ app.post("/signup", async (req: Request, res: Response) => {
     {
       httpOnly: true,
       secure: process.env.NODE_ENV === "production",
-      sameSite: "lax",
+      sameSite: "none",
       maxAge: Number(process.env.SESSION_TTL) * 1000 //1day     // 2 minutes
     }
   );
@@ -402,7 +402,7 @@ app.post("/o/authorize", async (req: Request, res: Response) => {
       {
         httpOnly: true,
         secure: process.env.NODE_ENV === "production",
-        sameSite: "lax",
+        sameSite: "none",
         maxAge: Number(process.env.SESSION_TTL) * 1000//----------------------
       }
     );
@@ -918,7 +918,7 @@ app.post("/o/token", async (req: Request, res: Response) => {
       {
         httpOnly: true,
         secure: process.env.NODE_ENV === "production",
-        sameSite: "lax",
+        sameSite: "none",
         path: "/",
         maxAge: Number(process.env.REFRESH_TOKEN_TTL) * 1000 //
       }
@@ -1284,7 +1284,7 @@ app.post("/logout", async (req, res) => {
     {
       httpOnly: true,
       secure: process.env.NODE_ENV === "production", // true in production
-      sameSite: "lax"
+      sameSite: "none"
     }
   );
 
