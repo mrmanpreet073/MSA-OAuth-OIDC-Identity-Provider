@@ -73,8 +73,9 @@ const authorizationCodes = new Map<string, AuthCode>();
 
 // ✅ redirect to home page
 app.get("/", (_: Request, res: Response) => {
-  res.redirect("/home");
-});
+  res.sendFile("home.html", {
+    root: "./public"
+  });});
 // ======================================================
 // OpenID Configuration
 // ======================================================
