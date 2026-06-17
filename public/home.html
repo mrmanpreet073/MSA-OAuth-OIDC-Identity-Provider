@@ -91,7 +91,7 @@
       height: 8px;
       border-radius: 50%;
       margin: 7px 0px 0px 0px;
-      background:rgb(0, 115, 255);
+      background: rgb(0, 115, 255);
       animation: pulse 2s ease-in-out infinite;
     }
 
@@ -546,8 +546,8 @@
       }
     }
 
-    .msa{
-height: 40px;
+    .msa {
+      height: 35px;
     }
   </style>
 </head>
@@ -558,21 +558,21 @@ height: 40px;
   <nav>
     <a class="nav-brand" href="/docs">
       <div class="nav-dot"></div>
-      <img src="../images/msa.png" class="msa" alt="">
+      <img src="./msa.png" class="msa" alt="Logo">
     </a>
 
     <ul class="nav-links">
       <li><a href="/.well-known/openid-configuration">Discovery</a></li>
       <li><a href="/.well-known/jwks.json">JWKS</a></li>
       <!-- <li><a href="/userInfo.html">UserInfo</a></li> -->
-      <li><a href="/docs" class="accent">Docs</a></li>
+      <li><a href="/docs" class="accent doc">Docs</a></li>
       <li><a href="/o/register-client" class="accent reg">Register Client</a></li>
     </ul>
 
-    <div class="nav-btns">
+    <!-- <div class="nav-btns">
       <button id="loginBtn" class="btn btn-primary">Login</button>
       <a id="signupBtn" class="btn btn-ghost">Signup</a>
-    </div>
+    </div> -->
   </nav>
 
   <!-- Hero -->
@@ -627,7 +627,8 @@ height: 40px;
         <div class="card-icon">🔑</div>
         <h3>RS256 JWT Authentication</h3>
         <p>Tokens are cryptographically signed using RSA private/public key pairs and verified through
-          <code>/.well-known/jwks.json</code>.</p>
+          <code>/.well-known/jwks.json</code>.
+        </p>
       </div>
 
       <div class="card">
@@ -648,7 +649,8 @@ height: 40px;
         <div class="card-icon">📋</div>
         <h3>Client Registration</h3>
         <p>Register client apps dynamically via <code>/o/register-client</code>. Each app gets a unique
-          <code>client_id</code> and hashed <code>client_secret</code>.</p>
+          <code>client_id</code> and hashed <code>client_secret</code>.
+        </p>
       </div>
 
     </div>
@@ -716,7 +718,8 @@ height: 40px;
   <!-- Footer -->
   <footer>
     <p>© 2026 <span>OpenID Connect</span> Identity Provider · RS256 · OAuth 2.0 · Session SSO</p>
-    <p style="margin-top:8px;font-size:11px;color:#374151">issuer: https://msa-auth.onrender.com · jwks: /.well-known/jwks.json
+    <p style="margin-top:8px;font-size:11px;color:#374151">issuer: https://msa-auth.onrender.com · jwks:
+      /.well-known/jwks.json
       · discovery: /.well-known/openid-configuration</p>
   </footer>
 
